@@ -386,8 +386,7 @@ export default function SportsBetting({ balance, onUpdateBalance, onOpenDeposit 
       }
 
       const cat = soccerMatches.filter((m) => m.category === soccerFilter && !m.isFinished);
-      const listToUse = cat.length > 0 ? cat : soccerMatches.filter(m => !m.isFinished);
-      const deduped = filterNextMatchPerTeam(listToUse as any) as Match[];
+      const deduped = filterNextMatchPerTeam(cat as any) as Match[];
       if (q) return deduped.filter(m => m.homeTeam.toLowerCase().includes(q) || m.awayTeam.toLowerCase().includes(q) || m.league.toLowerCase().includes(q));
       return deduped;
     }

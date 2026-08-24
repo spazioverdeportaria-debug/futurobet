@@ -63,16 +63,19 @@ export default function FortuneOxGame({
   const gameUrl = baseUrl;
 
   const displayName = gameName || catalogGame?.name || 'FuturoBet Slot';
-  const gameBg = catalogGame?.bgImage || '';
+  const gameBg = catalogGame?.bgImage || catalogGame?.icon || '';
 
   const MIN_BALANCE_REQUIRED = 20.00;
   const isBalanceInsufficient = balance < MIN_BALANCE_REQUIRED;
 
-  // Timeout para remover tela de loading rapidamente (1.5s)
+  // Estado para controlar se o popup de saldo está aberto (inicia fechado para o usuário ver o jogo carregando)
+  const [showDepositPopup, setShowDepositPopup] = useState<boolean>(false);
+
+  // Timeout para remover tela de loading rapidamente
   useEffect(() => {
     const timer = setTimeout(() => {
       setIsLoading(false);
-    }, 1500);
+    }, 1200);
     return () => clearTimeout(timer);
   }, [iframeKey]);
 
@@ -285,16 +288,26 @@ export default function FortuneOxGame({
         className="w-full flex-1 relative bg-black flex items-center justify-center overflow-hidden z-10"
       >
         
-        {/* Loading Spinner rápido */}
+        {/* Loading com Poster Real do Jogo no Fundo para nunca ficar tela preta */}
         {isLoading && (
-          <div className="absolute inset-0 z-20 bg-zinc-950 flex flex-col items-center justify-center p-4 text-center">
-            <div className="w-10 h-10 rounded-full border-3 border-amber-500/20 border-t-amber-400 animate-spin mb-2.5" />
-            <h3 className="text-xs font-black text-amber-100 uppercase tracking-wide">
-              CONECTANDO {displayName.toUpperCase()}...
-            </h3>
-            <p className="text-[10px] text-amber-400/80 font-semibold mt-0.5">
-              Carregando bobinas em tempo real...
-            </p>
+          <div className="absolute inset-0 z-20 bg-zinc-950 flex flex-col items-center justify-center p-4 text-center overflow-hidden">
+            {gameBg && (
+              <img 
+                src={gameBg} 
+                alt={displayName} 
+                referrerPolicy="no-referrer"
+                className="absolute inset-0 w-full h-full object-cover blur-sm opacity-40 scale-105" 
+              />
+            )}
+            <div className="relative z-10 flex flex-col items-center">
+              <div className="w-11 h-11 rounded-full border-3 border-amber-500/20 border-t-amber-400 animate-spin mb-3 shadow-[0_0_20px_rgba(245,158,11,0.5)]" />
+              <h3 className="text-sm font-black text-amber-100 uppercase tracking-wider drop-shadow-md">
+                {displayName.toUpperCase()}
+              </h3>
+              <p className="text-[11px] text-amber-400 font-bold mt-1 tracking-wide">
+                Carregando demonstração ao vivo...
+              </p>
+            </div>
           </div>
         )}
 
@@ -336,15 +349,29 @@ export default function FortuneOxGame({
           </div>
         )}
 
-        {/* 🔒 Pop-up Simples e Direto: Mostra o jogo ao fundo com overlay leve e convite para adicionar saldo */}
-        {isBalanceInsufficient && (
-          <div className="absolute inset-0 z-50 bg-black/55 backdrop-blur-[2px] flex items-center justify-center p-4 select-none animate-in fade-in duration-150">
+        {/* 🔒 Pop-up Simples e Direto: Mostra o jogo ao fundo com overlay e convite para adicionar saldo */}
+        {isBalanceInsufficient && showDepositPopup && (
+          <div 
+            onClick={() => setShowDepositPopup(false)}
+            className="absolute inset-0 z-50 bg-black/60 backdrop-blur-[2px] flex items-center justify-center p-4 select-none animate-in fade-in duration-150"
+          >
             
             {/* Card Modal Compacto e Transparente */}
-            <div className="w-full max-w-[340px] bg-[#0c0a09]/92 border border-amber-500/40 rounded-3xl p-6 text-center shadow-[0_10px_40px_rgba(0,0,0,0.85)] flex flex-col items-center space-y-4">
-              
+            <div 
+              onClick={(e) => e.stopPropagation()}
+              className="w-full max-w-[340px] bg-[#0c0a09]/95 border border-amber-500/40 rounded-3xl p-6 text-center shadow-[0_10px_40px_rgba(0,0,0,0.85)] flex flex-col items-center space-y-4 animate-in zoom-in-95 duration-150 relative"
+            >
+              {/* Botão Fechar X rápido para continuar vendo o demo */}
+              <button 
+                type="button"
+                onClick={() => setShowDepositPopup(false)}
+                className="absolute top-3.5 right-3.5 w-8 h-8 rounded-full bg-zinc-900/80 hover:bg-zinc-800 border border-zinc-700/60 text-zinc-400 hover:text-white flex items-center justify-center cursor-pointer transition"
+              >
+                ✕
+              </button>
+
               {/* Ícone de Raio / Dourado */}
-              <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-amber-600 via-yellow-400 to-amber-200 p-0.5 shadow-[0_0_25px_rgba(245,158,11,0.5)]">
+              <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-amber-600 via-yellow-400 to-amber-200 p-0.5 shadow-[0_0_25px_rgba(245,158,11,0.5)] mt-1">
                 <div className="w-full h-full bg-[#17120a] rounded-[14px] flex items-center justify-center">
                   <Zap className="w-7 h-7 text-amber-400 fill-amber-400" />
                 </div>
@@ -356,7 +383,7 @@ export default function FortuneOxGame({
                   Adicione saldo para jogar
                 </h3>
                 <p className="text-xs text-zinc-300 leading-relaxed">
-                  Para girar e jogar <strong className="text-amber-300">{displayName}</strong>, adicione saldo à sua conta.
+                  Para girar e concorrer a prêmios reais no <strong className="text-amber-300">{displayName}</strong>, adicione saldo à sua conta.
                 </p>
               </div>
 
@@ -368,7 +395,7 @@ export default function FortuneOxGame({
                     e.stopPropagation();
                     onOpenDeposit();
                   }}
-                  className="w-full py-3.5 bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-500 text-black font-black text-sm uppercase tracking-wider rounded-2xl shadow-[0_0_25px_rgba(245,158,11,0.5)] hover:brightness-110 active:scale-95 transition flex items-center justify-center gap-2 cursor-pointer"
+                  className="w-full py-3.5 bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-500 text-black font-black text-sm uppercase tracking-wider rounded-2xl shadow-[0_0_25px_rgba(245,158,11,0.5)] hover:brightness-110 active:scale-95 transition flex items-center justify-center gap-2 cursor-pointer border border-white/40"
                 >
                   <Zap className="w-4 h-4 fill-black stroke-black" />
                   <span>Adicionar Saldo (PIX)</span>
@@ -390,13 +417,22 @@ export default function FortuneOxGame({
 
         {/* 🎯 ENQUADRAMENTO EXATO: LARGURA 100% INTEGRAL (NÃO CORTA NENHUMA COLUNA OU PERSONAGEM) */}
         <div 
-          className={`w-full h-full relative overflow-hidden flex items-center justify-center ${isBalanceInsufficient ? 'pointer-events-none' : 'pointer-events-auto'}`}
+          className="w-full h-full relative overflow-hidden flex items-center justify-center"
           style={{
             // Altura expandida em 42px para empurrar o rodapé de crédito demo para baixo do footer
             marginTop: '0px',
             marginBottom: '-38px',
           }}
         >
+          {/* Camada invisível de captura de toque quando saldo insuficiente para abrir popup em qualquer toque */}
+          {isBalanceInsufficient && (
+            <div 
+              onClick={() => setShowDepositPopup(true)}
+              className="absolute inset-0 z-30 cursor-pointer"
+              title="Toque para adicionar saldo"
+            />
+          )}
+
           <iframe
             ref={iframeRef}
             key={iframeKey}
