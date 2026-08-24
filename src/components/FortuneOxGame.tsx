@@ -1,0 +1,494 @@
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { 
+  ArrowLeft, 
+  Plus, 
+  RefreshCw, 
+  Lock, 
+  Zap, 
+  ShieldAlert,
+  Minus
+} from 'lucide-react';
+import { GAMES_CATALOG } from '../data/gamesConfig';
+import { soundEngine } from '../utils/audio';
+
+interface FortuneOxGameProps {
+  gameName?: string | null;
+  onBack: () => void;
+  balance: number;
+  onUpdateBalance: (newBalance: number) => void;
+  onOpenDeposit: () => void;
+}
+
+const BET_OPTIONS = [0.50, 1.00, 2.00, 3.00, 5.00, 10.00, 20.00];
+
+export default function FortuneOxGame({
+  gameName,
+  onBack,
+  balance,
+  onUpdateBalance,
+  onOpenDeposit
+}: FortuneOxGameProps) {
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [iframeKey, setIframeKey] = useState<number>(0);
+  const [selectedBetIndex, setSelectedBetIndex] = useState<number>(1); // Padrão R$ 1,00
+  const [isSpinning, setIsSpinning] = useState<boolean>(false);
+  const [showExitConfirm, setShowExitConfirm] = useState<boolean>(false);
+
+  const containerRef = useRef<HTMLDivElement>(null);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const dummyFocusRef = useRef<HTMLButtonElement>(null);
+  
+  const balanceRef = useRef<number>(balance);
+  balanceRef.current = balance;
+
+  const currentBet = BET_OPTIONS[selectedBetIndex] || 1.00;
+  const currentBetRef = useRef<number>(currentBet);
+  currentBetRef.current = currentBet;
+
+  const lastSpinTimeRef = useRef<number>(0);
+
+  // Identificar jogo no catálogo
+  const nameLower = gameName?.toLowerCase() || '';
+  const catalogGame = GAMES_CATALOG.find(
+    g => g.name.toLowerCase() === nameLower || 
+         g.id === nameLower ||
+         nameLower.includes(g.id.replace('-', '')) ||
+         g.name.toLowerCase().includes(nameLower)
+  );
+
+  const baseUrl = catalogGame?.demoUrl || 
+    'https://demogamesfree.pragmaticplay.net/gs2c/openGame.do?gameSymbol=vs20olympgate&jurisdiction=99&lang=pt&cur=BRL&sys_orient=v&orient=v&technology=HTML5&platform=MOBILE';
+
+  // Parâmetros otimizados para carregamento rápido e mobile nativo
+  const separator = baseUrl.includes('?') ? '&' : '?';
+  const gameUrl = `${baseUrl}${separator}sys_orient=v&orient=v&technology=HTML5&platform=MOBILE`;
+
+  const displayName = gameName || catalogGame?.name || 'FuturoBet Slot';
+  const gameBg = catalogGame?.bgImage || '';
+
+  const isBalanceZero = balance < currentBet;
+
+  // Timeout para forçar remoção de tela preta / loading infinito se o jogo demorar
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setIsLoading(false);
+    }, 2800);
+    return () => clearTimeout(timer);
+  }, [iframeKey]);
+
+  // 🛡️ BLOQUEIA TELA CHEIA NATIVA DO NAVEGADOR PARA NÃO SAIR DA NOSSA INTERFACE
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      if (document.fullscreenElement || (document as any).webkitFullscreenElement) {
+        if (document.exitFullscreen) {
+          document.exitFullscreen().catch(() => {});
+        } else if ((document as any).webkitExitFullscreen) {
+          (document as any).webkitExitFullscreen();
+        }
+      }
+    };
+
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
+
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+      document.removeEventListener('webkitfullscreenchange', handleFullscreenChange);
+    };
+  }, []);
+
+  // 🎯 DESCONTA O VALOR DA APOSTA SELECIONADA DIRETAMENTE DO SALDO REAL
+  const handleSpinDeduction = useCallback(() => {
+    const currentBal = balanceRef.current;
+    const betCost = currentBetRef.current;
+    
+    // Se não tiver saldo suficiente para a aposta atual, abre o depósito
+    if (currentBal < betCost) {
+      soundEngine.playLockedSound();
+      return;
+    }
+
+    const now = Date.now();
+    // Cooldown rápido de 400ms para permitir giros contínuos sem duplicar acidentalmente
+    if (now - lastSpinTimeRef.current < 400) {
+      return;
+    }
+
+    lastSpinTimeRef.current = now;
+    setIsSpinning(true);
+
+    // Desconta o valor da aposta em tempo real
+    const newBalAfterBet = parseFloat(Math.max(0, currentBal - betCost).toFixed(2));
+    onUpdateBalance(newBalAfterBet);
+    soundEngine.playSpinSound();
+
+    setTimeout(() => {
+      setIsSpinning(false);
+    }, 600);
+
+    // Reseta o foco da janela para capturar o próximo toque com precisão
+    setTimeout(() => {
+      dummyFocusRef.current?.focus();
+    }, 50);
+  }, [onUpdateBalance]);
+
+  // 💰 CREDITA GANHO REAL DIRETAMENTE NA CONTA (SEM NOTIFICAÇÕES FLOATING INTRUSIVAS)
+  const handleCreditWinAmount = useCallback((amount: number) => {
+    if (amount <= 0 || isNaN(amount)) return;
+    // Ignora saldos fictícios do demo (ex: 100.000,00)
+    if (amount > 3000) return;
+
+    const currentBal = balanceRef.current;
+    const cleanAmount = parseFloat(amount.toFixed(2));
+    const newBal = parseFloat((currentBal + cleanAmount).toFixed(2));
+    
+    onUpdateBalance(newBal);
+    soundEngine.playWinChime();
+    soundEngine.playCoinDrop();
+  }, [onUpdateBalance]);
+
+  // 🎯 CAPTURADOR DE CLIQUES E EVENTOS DE GIRO
+  useEffect(() => {
+    // Quando o usuário toca no iframe, o foco sai da janela pai e vai para o iframe
+    const handleWindowBlur = () => {
+      handleSpinDeduction();
+      // Reseta o foco imediatamente para o botão oculto para capturar o próximo toque
+      setTimeout(() => {
+        dummyFocusRef.current?.focus();
+      }, 80);
+    };
+
+    // Monitor de foco do elemento ativo
+    const focusCheckInterval = setInterval(() => {
+      if (document.activeElement === iframeRef.current) {
+        handleSpinDeduction();
+        dummyFocusRef.current?.focus();
+      }
+    }, 100);
+
+    // Escuta eventos emitidos pelo iframe do provedor
+    const handleGameMessage = (event: MessageEvent) => {
+      try {
+        const msg = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
+        if (!msg) return;
+
+        // Detecta giro da bobina ou aposta
+        if (
+          msg.event === 'spin' || 
+          msg.action === 'spin' || 
+          msg.type === 'SPIN_START' ||
+          msg.type === 'BET' ||
+          (msg.data && (msg.data.event === 'spin' || msg.data.action === 'spin'))
+        ) {
+          handleSpinDeduction();
+        }
+
+        // Detecta ganhos reais da rodada
+        const winValue = msg.winAmount || msg.win || msg.payout || (msg.data && msg.data.winAmount);
+        if (typeof winValue === 'number' && winValue > 0 && winValue < 3000) {
+          handleCreditWinAmount(winValue);
+        }
+      } catch (e) {
+        // Ignora mensagens não serializadas
+      }
+    };
+
+    window.addEventListener('blur', handleWindowBlur);
+    window.addEventListener('message', handleGameMessage);
+
+    return () => {
+      clearInterval(focusCheckInterval);
+      window.removeEventListener('blur', handleWindowBlur);
+      window.removeEventListener('message', handleGameMessage);
+    };
+  }, [handleSpinDeduction, handleCreditWinAmount]);
+
+  const handleReloadGame = () => {
+    setIsLoading(true);
+    setIframeKey(prev => prev + 1);
+  };
+
+  const handleDecreaseBet = () => {
+    if (selectedBetIndex > 0) {
+      setSelectedBetIndex(prev => prev - 1);
+    }
+  };
+
+  const handleIncreaseBet = () => {
+    if (selectedBetIndex < BET_OPTIONS.length - 1) {
+      setSelectedBetIndex(prev => prev + 1);
+    }
+  };
+
+  return (
+    <div className="w-full h-full h-[100dvh] max-w-md mx-auto bg-black flex flex-col items-center justify-between overflow-hidden select-none font-sans relative">
+      
+      {/* Botão invisível para resetar o foco da janela e capturar todos os giros */}
+      <button 
+        ref={dummyFocusRef} 
+        aria-hidden="true" 
+        className="opacity-0 pointer-events-none absolute top-0 left-0 w-0 h-0" 
+        tabIndex={-1} 
+      />
+
+      {/* 1. BACKGROUND AMBIENTE */}
+      {gameBg && (
+        <div 
+          className="absolute inset-0 pointer-events-none opacity-20 filter blur-3xl scale-110 z-0 transition-opacity duration-700"
+          style={{
+            backgroundImage: `url(${gameBg})`,
+            backgroundPosition: 'center',
+            backgroundSize: 'cover',
+          }}
+        />
+      )}
+
+      {/* 2. TOP BAR: VOLTAR + NOME DO JOGO + RECARREGAR */}
+      <header className="w-full z-30 bg-[#0c0803]/95 backdrop-blur-md border-b border-amber-500/30 px-3 py-2 flex items-center justify-between gap-2 shrink-0 shadow-lg">
+        
+        {/* Voltar com Confirmação */}
+        <button
+          onClick={() => setShowExitConfirm(true)}
+          className="flex items-center gap-1.5 text-xs font-black text-amber-200 bg-black/90 border border-amber-500/40 hover:border-amber-400 px-3 py-1.5 rounded-xl cursor-pointer active:scale-95 transition shrink-0 shadow"
+        >
+          <ArrowLeft size={14} className="text-amber-400" />
+          <span>Voltar</span>
+        </button>
+
+        {/* Nome do Jogo */}
+        <div className="flex flex-col items-center justify-center min-w-0 flex-1 px-1 text-center">
+          <span className="text-xs sm:text-sm font-black text-transparent bg-clip-text bg-gradient-to-r from-amber-100 via-amber-300 to-amber-100 truncate w-full uppercase tracking-wide">
+            {displayName}
+          </span>
+          <span className="text-[9px] font-bold text-emerald-400 flex items-center gap-1">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+            MODO REAL FUTUROBET
+          </span>
+        </div>
+
+        {/* Recarregar */}
+        <div className="flex items-center gap-1.5 shrink-0">
+          <button
+            onClick={handleReloadGame}
+            className="p-2 text-zinc-300 hover:text-amber-300 bg-black/80 rounded-xl border border-amber-500/30 transition cursor-pointer active:scale-95"
+            title="Recarregar jogo"
+          >
+            <RefreshCw className="w-3.5 h-3.5" />
+          </button>
+        </div>
+
+      </header>
+
+      {/* 3. ÁREA PRINCIPAL DO JOGO: PROPORÇÃO 100% PERFEITA SEM CORTAR ELEMENTOS */}
+      <main 
+        ref={containerRef}
+        className="w-full flex-1 relative bg-black flex items-center justify-center overflow-hidden z-10"
+      >
+        
+        {/* Loading Spinner rápido */}
+        {isLoading && (
+          <div className="absolute inset-0 z-20 bg-zinc-950 flex flex-col items-center justify-center p-4 text-center">
+            <div className="w-10 h-10 rounded-full border-3 border-amber-500/20 border-t-amber-400 animate-spin mb-2.5" />
+            <h3 className="text-xs font-black text-amber-100 uppercase tracking-wide">
+              CONECTANDO {displayName.toUpperCase()}...
+            </h3>
+            <p className="text-[10px] text-amber-400/80 font-semibold mt-0.5">
+              Carregando bobinas em tempo real...
+            </p>
+          </div>
+        )}
+
+        {/* ⚠️ Confirmação de Saída do Jogo */}
+        {showExitConfirm && (
+          <div className="absolute inset-0 z-50 bg-black/92 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center space-y-4 animate-in fade-in duration-200 select-none">
+            
+            <div className="w-14 h-14 rounded-full bg-amber-500/15 border border-amber-500/40 flex items-center justify-center text-amber-400 shadow-[0_0_25px_rgba(245,158,11,0.3)]">
+              <ArrowLeft className="w-7 h-7" />
+            </div>
+
+            <div>
+              <h3 className="text-base font-black text-white uppercase tracking-tight">
+                Deseja sair do jogo?
+              </h3>
+              <p className="text-xs text-zinc-300 mt-1.5 max-w-xs mx-auto leading-relaxed">
+                Seu saldo de <strong className="text-amber-400 font-mono">R$ {balance.toFixed(2)}</strong> está seguro. Deseja retornar ao lobby do cassino?
+              </p>
+            </div>
+
+            <div className="w-full max-w-xs space-y-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowExitConfirm(false)}
+                className="w-full py-3 bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-500 text-black font-black text-xs uppercase tracking-wider rounded-xl shadow-[0_0_20px_rgba(245,158,11,0.4)] hover:brightness-110 active:scale-95 transition cursor-pointer"
+              >
+                CONTINUAR JOGANDO
+              </button>
+
+              <button
+                type="button"
+                onClick={onBack}
+                className="w-full py-2.5 bg-zinc-900/90 hover:bg-zinc-800 border border-zinc-800 text-zinc-400 hover:text-white font-bold text-xs uppercase rounded-xl transition cursor-pointer"
+              >
+                Sim, Sair para o Cassino
+              </button>
+            </div>
+
+          </div>
+        )}
+
+        {/* 🔒 Saldo Insuficiente Overlay */}
+        {isBalanceZero && (
+          <div className="absolute inset-0 z-40 bg-black/94 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center space-y-4 animate-in fade-in duration-200 select-none">
+            
+            <div className="w-16 h-16 rounded-3xl bg-gradient-to-tr from-amber-600 via-yellow-400 to-amber-200 p-0.5 shadow-[0_0_35px_rgba(245,158,11,0.5)]">
+              <div className="w-full h-full bg-[#120a02] rounded-[22px] flex items-center justify-center">
+                <Lock className="w-8 h-8 text-amber-400 animate-pulse" />
+              </div>
+            </div>
+
+            <div>
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-500/20 border border-amber-500/40 rounded-full text-amber-300 text-[10px] font-extrabold mb-2">
+                <ShieldAlert className="w-3.5 h-3.5 text-amber-400" />
+                <span>SALDO INSUFICIENTE</span>
+              </div>
+              <h3 className="text-base font-black text-transparent bg-clip-text bg-gradient-to-r from-amber-100 via-yellow-200 to-amber-300 uppercase tracking-tight">
+                ADICIONE SALDO PARA JOGAR
+              </h3>
+              <p className="text-xs text-zinc-300 mt-1 max-w-xs mx-auto leading-relaxed">
+                Você precisa de no mínimo <strong className="text-amber-300">R$ {currentBet.toFixed(2)}</strong> para girar o <strong className="text-amber-300">{displayName}</strong>.
+              </p>
+            </div>
+
+            {/* Saldo Atual */}
+            <div className="w-full max-w-xs p-3 bg-black/80 border border-amber-500/30 rounded-2xl text-left text-xs space-y-1">
+              <div className="flex justify-between items-center text-zinc-400">
+                <span>Seu Saldo:</span>
+                <span className="font-mono font-black text-amber-400 text-sm">
+                  R$ {balance.toFixed(2)}
+                </span>
+              </div>
+            </div>
+
+            {/* Botão de Depósito */}
+            <div className="w-full max-w-xs space-y-2 pt-1">
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onOpenDeposit();
+                }}
+                className="w-full py-3.5 bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-500 text-black font-black text-xs uppercase tracking-wider rounded-2xl shadow-[0_0_25px_rgba(245,158,11,0.6)] hover:brightness-110 active:scale-95 transition flex items-center justify-center gap-2 cursor-pointer border-2 border-white/60"
+              >
+                <Zap className="w-4 h-4 fill-black stroke-black animate-bounce" />
+                <span>DEPOSITAR PIX SYSPAY ⚡</span>
+              </button>
+
+              <button
+                onClick={onBack}
+                className="w-full py-2.5 bg-zinc-900/80 hover:bg-zinc-800 text-zinc-400 hover:text-white rounded-xl border border-zinc-800 text-xs font-bold transition cursor-pointer"
+              >
+                Voltar para o Cassino
+              </button>
+            </div>
+
+          </div>
+        )}
+
+        {/* 🎯 ENQUADRAMENTO EXATO: LARGURA 100% INTEGRAL (NÃO CORTA NENHUMA COLUNA OU PERSONAGEM) */}
+        <div 
+          className="w-full h-full relative overflow-hidden flex items-center justify-center pointer-events-auto"
+          style={{
+            // Altura expandida em 42px para empurrar o rodapé de crédito demo para baixo do footer
+            marginTop: '0px',
+            marginBottom: '-38px',
+          }}
+        >
+          <iframe
+            ref={iframeRef}
+            key={iframeKey}
+            src={gameUrl}
+            title={displayName}
+            onLoad={() => setIsLoading(false)}
+            className="w-full border-0 select-none bg-black block"
+            style={{
+              width: '100%',
+              height: 'calc(100% + 42px)',
+              minHeight: '100%',
+              touchAction: 'manipulation'
+            }}
+            allow="autoplay"
+            sandbox="allow-forms allow-modals allow-orientation-lock allow-pointer-lock allow-popups allow-popups-to-escape-sandbox allow-same-origin allow-scripts"
+          />
+        </div>
+
+      </main>
+
+      {/* 4. 🥇 LUXURY CONTROLLER: SALDO REAL + APOSTA REAL + PIX (GIRO DIRETO NO JOGO) */}
+      <footer className="w-full z-30 bg-gradient-to-t from-[#080502] via-[#120a03] to-[#1a0f05] border-t-2 border-amber-500/50 px-3 py-2.5 flex flex-col gap-1 shrink-0 shadow-[0_-12px_35px_rgba(0,0,0,0.98)] relative">
+        
+        <div className="flex items-center justify-between gap-2 w-full">
+          
+          {/* 🟢 SALDO REAL DA CONTA */}
+          <div 
+            onClick={onOpenDeposit}
+            className="bg-black/90 border border-amber-500/40 hover:border-amber-400 rounded-xl px-3 py-1.5 flex flex-col justify-center cursor-pointer shadow active:scale-95 transition min-w-[110px]"
+          >
+            <div className="flex items-center gap-1">
+              <span className="relative flex h-1.5 w-1.5">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
+              </span>
+              <span className="text-[8px] font-extrabold text-slate-300 uppercase tracking-tighter">
+                SALDO REAL
+              </span>
+            </div>
+            <span className="text-xs font-black text-emerald-400 font-mono">
+              R$ {balance.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </span>
+          </div>
+
+          {/* 🎯 SELETOR DE APOSTA REAL POR GIRO (R$ 0,50 a R$ 20,00) */}
+          <div className="bg-black/90 border border-amber-500/30 rounded-xl px-2 py-1 flex items-center gap-1.5 shadow">
+            
+            <button
+              onClick={handleDecreaseBet}
+              disabled={selectedBetIndex === 0}
+              className="w-6 h-6 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-amber-300 font-bold flex items-center justify-center transition disabled:opacity-30 cursor-pointer active:scale-95"
+            >
+              <Minus size={12} />
+            </button>
+
+            <div className="flex flex-col items-center justify-center min-w-[62px] text-center">
+              <span className="text-[8px] font-bold text-slate-400 uppercase tracking-tight">
+                Aposta Real
+              </span>
+              <span className="text-xs font-black text-amber-300 font-mono">
+                R$ {currentBet.toFixed(2)}
+              </span>
+            </div>
+
+            <button
+              onClick={handleIncreaseBet}
+              disabled={selectedBetIndex === BET_OPTIONS.length - 1}
+              className="w-6 h-6 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-amber-300 font-bold flex items-center justify-center transition disabled:opacity-30 cursor-pointer active:scale-95"
+            >
+              <Plus size={12} />
+            </button>
+
+          </div>
+
+          {/* ⚡ BOTÃO DEPOSITAR PIX */}
+          <button
+            onClick={onOpenDeposit}
+            className="flex-1 py-2 px-3 bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-500 text-black font-black text-[11px] uppercase tracking-wider rounded-xl shadow-[0_0_15px_rgba(245,158,11,0.5)] hover:brightness-110 active:scale-95 transition flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap border border-white/40"
+          >
+            <Zap className="w-3.5 h-3.5 fill-black stroke-black" />
+            <span>+ PIX</span>
+          </button>
+
+        </div>
+
+      </footer>
+
+    </div>
+  );
+}

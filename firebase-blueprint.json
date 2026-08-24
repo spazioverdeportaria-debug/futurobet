@@ -1,0 +1,68 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile with casino balance, affiliate stats, cpf, and daily spin data.",
+      "type": "object",
+      "properties": {
+        "cpf": { "type": "string", "maxLength": 32 },
+        "name": { "type": "string", "maxLength": 128 },
+        "phone": { "type": "string", "maxLength": 32 },
+        "passwordHash": { "type": "string", "maxLength": 256 },
+        "balance": { "type": "number" },
+        "balanceBonus": { "type": "number" },
+        "termsAccepted": { "type": "boolean" },
+        "referralCode": { "type": "string", "maxLength": 32 },
+        "affiliateEarnings": { "type": "number" },
+        "invitedCount": { "type": "number" },
+        "lastDailySpin": { "type": "string", "maxLength": 64 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["cpf", "name", "balance"]
+    },
+    "Bet": {
+      "title": "Bet",
+      "description": "Sports betting coupon placed by user.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "userId": { "type": "string", "maxLength": 128 },
+        "stake": { "type": "number" },
+        "totalOdds": { "type": "number" },
+        "possibleReturn": { "type": "number" },
+        "status": { "type": "string", "enum": ["PENDING", "WON", "LOST"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "userId", "stake", "totalOdds", "status"]
+    },
+    "Transaction": {
+      "title": "Transaction",
+      "description": "Financial logs for deposits, withdrawals, and game wins.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "userId": { "type": "string", "maxLength": 128 },
+        "type": { "type": "string", "enum": ["DEPOSIT", "WITHDRAWAL", "SPIN_WIN", "BET_WIN", "BET_PLACE"] },
+        "amount": { "type": "number" },
+        "status": { "type": "string", "enum": ["COMPLETED", "PENDING"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "userId", "type", "amount", "status"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "User profile document identified by Firebase Auth UID."
+    },
+    "/users/{userId}/bets/{betId}": {
+      "schema": { "$ref": "#/entities/Bet" },
+      "description": "Subcollection of bets placed by the user."
+    },
+    "/users/{userId}/transactions/{txId}": {
+      "schema": { "$ref": "#/entities/Transaction" },
+      "description": "Subcollection of user transaction history."
+    }
+  }
+}

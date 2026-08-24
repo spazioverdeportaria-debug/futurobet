@@ -1,0 +1,6 @@
+{
+  "name": "FuturoBet",
+  "description": "FuturoBet online gaming interface showcasing offers, featured games, and casino dashboard design.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
