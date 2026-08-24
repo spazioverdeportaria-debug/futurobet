@@ -242,42 +242,6 @@ export const CORE_UPCOMING_MATCHES: FootballMatch[] = [
     odds: { home: 2.45, draw: 3.00, away: 2.90, over25: 2.10, btts: 1.90 },
   },
   {
-    id: 'bra_3',
-    category: 'BRASILEIRAO',
-    league: 'Campeonato Brasileiro Série A',
-    homeTeam: 'Botafogo',
-    awayTeam: 'Fluminense',
-    homeLogo: 'https://crests.football-data.org/1770.png',
-    awayLogo: 'https://crests.football-data.org/1765.png',
-    homeCode: 'BOT',
-    awayCode: 'FLU',
-    homeColor: 'from-zinc-900 to-black',
-    awayColor: 'from-red-900 to-emerald-950',
-    homeScore: 1,
-    awayScore: 0,
-    timeMinute: 37,
-    timeFormatted: "37' 🔴",
-    timeOnly: 'Ao Vivo',
-    dayFormatted: 'Ao Vivo',
-    fullDateTimeFormatted: 'Ao Vivo • 37 min',
-    dateTimestamp: Date.now() - (37 * 60 * 1000),
-    isLive: true,
-    isFinished: false,
-    status: 'IN_PLAY',
-    stadium: 'Nilton Santos (Rio de Janeiro)',
-    odds: { home: 1.65, draw: 3.40, away: 5.20, over25: 1.85, btts: 2.05 },
-    stats: {
-      possessionHome: 58,
-      possessionAway: 42,
-      shotsHome: 6,
-      shotsAway: 2,
-      cornersHome: 4,
-      cornersAway: 1,
-      attacksHome: 38,
-      attacksAway: 21,
-    }
-  },
-  {
     id: 'bra_4',
     category: 'BRASILEIRAO',
     league: 'Campeonato Brasileiro Série A',
@@ -937,31 +901,10 @@ export async function getOrFetchFootballMatches(forceRefresh = false): Promise<F
             };
           });
 
-        // Ensure both Brazilian upcoming matches and finished matches are present if API has partial data
-        const hasBrasileirao = mapped.some(m => m.category === 'BRASILEIRAO' && !m.isFinished);
-        const hasFinished = mapped.some(m => m.isFinished);
-        
-        let finalMatches = [...mapped];
-        if (!hasBrasileirao) {
-          finalMatches = [...finalMatches, ...CORE_UPCOMING_MATCHES.filter(m => m.category === 'BRASILEIRAO')];
-        }
-        if (!hasFinished) {
-          finalMatches = [...finalMatches, ...FALLBACK_FINISHED_MATCHES];
-        }
-
-        // Also add Copa do Brasil & Libertadores fixtures if missing from standard European feed
-        const hasCopaBrasil = finalMatches.some(m => m.category === 'COPA_DO_BRASIL');
-        if (!hasCopaBrasil) {
-          finalMatches = [...finalMatches, ...CORE_UPCOMING_MATCHES.filter(m => m.category === 'COPA_DO_BRASIL')];
-        }
-        const hasLibertadores = finalMatches.some(m => m.category === 'LIBERTADORES');
-        if (!hasLibertadores) {
-          finalMatches = [...finalMatches, ...CORE_UPCOMING_MATCHES.filter(m => m.category === 'LIBERTADORES')];
-        }
-
-        cachedMatches = finalMatches;
+        // When API matches are returned, use them directly (only real games)
+        cachedMatches = mapped;
         lastFetchTime = Date.now();
-        return finalMatches;
+        return mapped;
       }
     } catch (err) {
       console.warn('getOrFetchFootballMatches API error:', err);
@@ -969,7 +912,7 @@ export async function getOrFetchFootballMatches(forceRefresh = false): Promise<F
       isFetchingPromise = null;
     }
 
-    // Fallback cache if API unreachable (e.g. static Vercel deploy)
+    // Fallback scheduled real matches if API unreachable (e.g. offline or strict network)
     if (!cachedMatches || cachedMatches.length === 0) {
       cachedMatches = [...CORE_UPCOMING_MATCHES, ...FALLBACK_FINISHED_MATCHES];
     }
