@@ -135,7 +135,7 @@ export const GAMES_CATALOG: GameConfig[] = [
     bgImage: 'https://www.segs.com.br/media/k2/items/cache/abb4a514c067bb67ed4e552f8f109c6f_XL.jpg',
     badge: 'HOT',
     accentColor: '#ec4899',
-    demoUrl: 'https://demogamesfree.pragmaticplay.net/gs2c/openGame.do?gameSymbol=vs20sweetbonanza&jurisdiction=99&lang=pt&cur=BRL&sys_orient=v&orient=v&technology=HTML5&platform=MOBILE',
+    demoUrl: 'https://demogamesfree.pragmaticplay.net/gs2c/openGame.do?gameSymbol=vs20sweetbonanza&lang=pt&cur=BRL',
   },
   {
     id: 'gates-of-olympus',
@@ -148,7 +148,7 @@ export const GAMES_CATALOG: GameConfig[] = [
     bgImage: 'https://fruityslots.com/wp-content/uploads/2021/05/gates-of-olympus-slot-logo.jpg',
     badge: 'HOT',
     accentColor: '#3b82f6',
-    demoUrl: 'https://demogamesfree.pragmaticplay.net/gs2c/openGame.do?gameSymbol=vs20olympgate&jurisdiction=99&lang=pt&cur=BRL&sys_orient=v&orient=v&technology=HTML5&platform=MOBILE',
+    demoUrl: 'https://demogamesfree.pragmaticplay.net/gs2c/openGame.do?gameSymbol=vs20olympgate&lang=pt&cur=BRL',
   },
   {
     id: 'mines',
@@ -174,7 +174,7 @@ export const GAMES_CATALOG: GameConfig[] = [
     bgImage: 'https://tse-mm.bing.com/th?q=sugar%20rush%201000%20demo',
     badge: 'HOT',
     accentColor: '#a855f7',
-    demoUrl: 'https://demogamesfree.pragmaticplay.net/gs2c/openGame.do?gameSymbol=vs20sugarrush&jurisdiction=99&lang=pt&cur=BRL&sys_orient=v&orient=v&technology=HTML5&platform=MOBILE',
+    demoUrl: 'https://demogamesfree.pragmaticplay.net/gs2c/openGame.do?gameSymbol=vs20sugarrush&lang=pt&cur=BRL',
   },
   {
     id: 'starlight-princess',
@@ -187,7 +187,7 @@ export const GAMES_CATALOG: GameConfig[] = [
     bgImage: 'https://tse-mm.bing.com/th?q=princess%20starlight&w=512&h=512&c=7',
     badge: 'TURBO',
     accentColor: '#f43f5e',
-    demoUrl: 'https://demogamesfree.pragmaticplay.net/gs2c/openGame.do?gameSymbol=vs20starlight&jurisdiction=99&lang=pt&cur=BRL&sys_orient=v&orient=v&technology=HTML5&platform=MOBILE',
+    demoUrl: 'https://demogamesfree.pragmaticplay.net/gs2c/openGame.do?gameSymbol=vs20starlight&lang=pt&cur=BRL',
   },
   {
     id: 'big-bass-bonanza',
@@ -200,7 +200,7 @@ export const GAMES_CATALOG: GameConfig[] = [
     bgImage: 'https://play-lh.googleusercontent.com/FkcZso198lIGQ8HFTrkYqtiXbkSWxGexWWV7LghJ_AS0EmoPIn1FKlMCUUKuKeyYpE2P31sYVhD6ngLGmNkE',
     badge: 'POPULAR',
     accentColor: '#0284c7',
-    demoUrl: 'https://demogamesfree.pragmaticplay.net/gs2c/openGame.do?gameSymbol=vs10bbbonanza&jurisdiction=99&lang=pt&cur=BRL&sys_orient=v&orient=v&technology=HTML5&platform=MOBILE',
+    demoUrl: 'https://demogamesfree.pragmaticplay.net/gs2c/openGame.do?gameSymbol=vs10bbbonanza&lang=pt&cur=BRL',
   },
   {
     id: 'goal',
@@ -226,7 +226,7 @@ export const GAMES_CATALOG: GameConfig[] = [
     bgImage: 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcT9Iyr0UaG1OGjwbOwKlHQxqJdVOXlCeMCC9an7tOltvw&s=10',
     badge: 'NOVO',
     accentColor: '#10b981',
-    demoUrl: 'https://demogamesfree.pragmaticplay.net/gs2c/openGame.do?gameSymbol=vs20fruitparty&jurisdiction=99&lang=pt&cur=BRL&sys_orient=v&orient=v&technology=HTML5&platform=MOBILE',
+    demoUrl: 'https://demogamesfree.pragmaticplay.net/gs2c/openGame.do?gameSymbol=vs20fruitparty&lang=pt&cur=BRL',
   },
   {
     id: 'madame-destiny',
@@ -239,7 +239,7 @@ export const GAMES_CATALOG: GameConfig[] = [
     bgImage: 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQALqcm0KON_3oZ4xlysaZEMMeZESFo2qG9BXhhqrhINFquTc50rH8npZE&s=10',
     badge: 'HOT',
     accentColor: '#a855f7',
-    demoUrl: 'https://demogamesfree.pragmaticplay.net/gs2c/openGame.do?gameSymbol=vswaysmadame&jurisdiction=99&lang=pt&cur=BRL&sys_orient=v&orient=v&technology=HTML5&platform=MOBILE',
+    demoUrl: 'https://demogamesfree.pragmaticplay.net/gs2c/openGame.do?gameSymbol=vswaysmadame&lang=pt&cur=BRL',
   },
   {
     id: 'wolf-gold',
@@ -252,7 +252,7 @@ export const GAMES_CATALOG: GameConfig[] = [
     bgImage: 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRcxG8d-9Vy_1SZyFbVJqNcNpEp2k46D0PtULHcRrBOyfoMUHrn5YHNFLRm&s=10',
     badge: 'POPULAR',
     accentColor: '#3b82f6',
-    demoUrl: 'https://demogamesfree.pragmaticplay.net/gs2c/openGame.do?gameSymbol=vs25wolfgold&jurisdiction=99&lang=pt&cur=BRL&sys_orient=v&orient=v&technology=HTML5&platform=MOBILE',
+    demoUrl: 'https://demogamesfree.pragmaticplay.net/gs2c/openGame.do?gameSymbol=vs25wolfgold&lang=pt&cur=BRL',
   },
   {
     id: 'hand-of-midas',
@@ -265,7 +265,7 @@ export const GAMES_CATALOG: GameConfig[] = [
     bgImage: 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcT7x3UsD3QB9ME5gSCrzI-uwlKgQLS41T2jSCWhAxZKZybpLplMk3V9Pq8&s=10',
     badge: 'NOVO',
     accentColor: '#f59e0b',
-    demoUrl: 'https://demogamesfree.pragmaticplay.net/gs2c/openGame.do?gameSymbol=vs20midas&jurisdiction=99&lang=pt&cur=BRL&sys_orient=v&orient=v&technology=HTML5&platform=MOBILE',
+    demoUrl: 'https://demogamesfree.pragmaticplay.net/gs2c/openGame.do?gameSymbol=vs20midas&lang=pt&cur=BRL',
   },
   {
     id: 'aviator',

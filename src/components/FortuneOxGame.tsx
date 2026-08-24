@@ -57,22 +57,22 @@ export default function FortuneOxGame({
   );
 
   const baseUrl = catalogGame?.demoUrl || 
-    'https://demogamesfree.pragmaticplay.net/gs2c/openGame.do?gameSymbol=vs20olympgate&jurisdiction=99&lang=pt&cur=BRL&sys_orient=v&orient=v&technology=HTML5&platform=MOBILE';
+    'https://demogamesfree.pragmaticplay.net/gs2c/openGame.do?gameSymbol=vs20olympgate&lang=pt&cur=BRL';
 
-  // Parâmetros otimizados para carregamento rápido e mobile nativo
-  const separator = baseUrl.includes('?') ? '&' : '?';
-  const gameUrl = `${baseUrl}${separator}sys_orient=v&orient=v&technology=HTML5&platform=MOBILE`;
+  // Parâmetros limpos e diretos para carregamento veloz sem duplicação de queries
+  const gameUrl = baseUrl;
 
   const displayName = gameName || catalogGame?.name || 'FuturoBet Slot';
   const gameBg = catalogGame?.bgImage || '';
 
-  const isBalanceZero = balance < currentBet;
+  const MIN_BALANCE_REQUIRED = 20.00;
+  const isBalanceInsufficient = balance < MIN_BALANCE_REQUIRED;
 
-  // Timeout para forçar remoção de tela preta / loading infinito se o jogo demorar
+  // Timeout para remover tela de loading rapidamente (1.5s)
   useEffect(() => {
     const timer = setTimeout(() => {
       setIsLoading(false);
-    }, 2800);
+    }, 1500);
     return () => clearTimeout(timer);
   }, [iframeKey]);
 
@@ -102,8 +102,8 @@ export default function FortuneOxGame({
     const currentBal = balanceRef.current;
     const betCost = currentBetRef.current;
     
-    // Se não tiver saldo suficiente para a aposta atual, abre o depósito
-    if (currentBal < betCost) {
+    // Se não tiver saldo mínimo de R$ 20,00 para jogar, bloqueia e abre o depósito
+    if (currentBal < 20.00) {
       soundEngine.playLockedSound();
       return;
     }
@@ -336,58 +336,53 @@ export default function FortuneOxGame({
           </div>
         )}
 
-        {/* 🔒 Saldo Insuficiente Overlay */}
-        {isBalanceZero && (
-          <div className="absolute inset-0 z-40 bg-black/94 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center space-y-4 animate-in fade-in duration-200 select-none">
+        {/* 🔒 Pop-up Simples e Direto: Mostra o jogo ao fundo com overlay leve e convite para adicionar saldo */}
+        {isBalanceInsufficient && (
+          <div className="absolute inset-0 z-50 bg-black/55 backdrop-blur-[2px] flex items-center justify-center p-4 select-none animate-in fade-in duration-150">
             
-            <div className="w-16 h-16 rounded-3xl bg-gradient-to-tr from-amber-600 via-yellow-400 to-amber-200 p-0.5 shadow-[0_0_35px_rgba(245,158,11,0.5)]">
-              <div className="w-full h-full bg-[#120a02] rounded-[22px] flex items-center justify-center">
-                <Lock className="w-8 h-8 text-amber-400 animate-pulse" />
+            {/* Card Modal Compacto e Transparente */}
+            <div className="w-full max-w-[340px] bg-[#0c0a09]/92 border border-amber-500/40 rounded-3xl p-6 text-center shadow-[0_10px_40px_rgba(0,0,0,0.85)] flex flex-col items-center space-y-4">
+              
+              {/* Ícone de Raio / Dourado */}
+              <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-amber-600 via-yellow-400 to-amber-200 p-0.5 shadow-[0_0_25px_rgba(245,158,11,0.5)]">
+                <div className="w-full h-full bg-[#17120a] rounded-[14px] flex items-center justify-center">
+                  <Zap className="w-7 h-7 text-amber-400 fill-amber-400" />
+                </div>
               </div>
-            </div>
 
-            <div>
-              <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-500/20 border border-amber-500/40 rounded-full text-amber-300 text-[10px] font-extrabold mb-2">
-                <ShieldAlert className="w-3.5 h-3.5 text-amber-400" />
-                <span>SALDO INSUFICIENTE</span>
+              {/* Textos Claros e Objetivos */}
+              <div className="space-y-1">
+                <h3 className="text-lg font-black text-white uppercase tracking-tight">
+                  Adicione saldo para jogar
+                </h3>
+                <p className="text-xs text-zinc-300 leading-relaxed">
+                  Para girar e jogar <strong className="text-amber-300">{displayName}</strong>, adicione saldo à sua conta.
+                </p>
               </div>
-              <h3 className="text-base font-black text-transparent bg-clip-text bg-gradient-to-r from-amber-100 via-yellow-200 to-amber-300 uppercase tracking-tight">
-                ADICIONE SALDO PARA JOGAR
-              </h3>
-              <p className="text-xs text-zinc-300 mt-1 max-w-xs mx-auto leading-relaxed">
-                Você precisa de no mínimo <strong className="text-amber-300">R$ {currentBet.toFixed(2)}</strong> para girar o <strong className="text-amber-300">{displayName}</strong>.
-              </p>
-            </div>
 
-            {/* Saldo Atual */}
-            <div className="w-full max-w-xs p-3 bg-black/80 border border-amber-500/30 rounded-2xl text-left text-xs space-y-1">
-              <div className="flex justify-between items-center text-zinc-400">
-                <span>Seu Saldo:</span>
-                <span className="font-mono font-black text-amber-400 text-sm">
-                  R$ {balance.toFixed(2)}
-                </span>
+              {/* Botões de Ação */}
+              <div className="w-full space-y-2 pt-1">
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onOpenDeposit();
+                  }}
+                  className="w-full py-3.5 bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-500 text-black font-black text-sm uppercase tracking-wider rounded-2xl shadow-[0_0_25px_rgba(245,158,11,0.5)] hover:brightness-110 active:scale-95 transition flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <Zap className="w-4 h-4 fill-black stroke-black" />
+                  <span>Adicionar Saldo (PIX)</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={onBack}
+                  className="w-full py-2.5 bg-zinc-900/80 hover:bg-zinc-800 text-zinc-400 hover:text-white rounded-xl border border-zinc-800/80 text-xs font-bold transition cursor-pointer"
+                >
+                  Voltar para o Cassino
+                </button>
               </div>
-            </div>
 
-            {/* Botão de Depósito */}
-            <div className="w-full max-w-xs space-y-2 pt-1">
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onOpenDeposit();
-                }}
-                className="w-full py-3.5 bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-500 text-black font-black text-xs uppercase tracking-wider rounded-2xl shadow-[0_0_25px_rgba(245,158,11,0.6)] hover:brightness-110 active:scale-95 transition flex items-center justify-center gap-2 cursor-pointer border-2 border-white/60"
-              >
-                <Zap className="w-4 h-4 fill-black stroke-black animate-bounce" />
-                <span>DEPOSITAR PIX SYSPAY ⚡</span>
-              </button>
-
-              <button
-                onClick={onBack}
-                className="w-full py-2.5 bg-zinc-900/80 hover:bg-zinc-800 text-zinc-400 hover:text-white rounded-xl border border-zinc-800 text-xs font-bold transition cursor-pointer"
-              >
-                Voltar para o Cassino
-              </button>
             </div>
 
           </div>
@@ -395,7 +390,7 @@ export default function FortuneOxGame({
 
         {/* 🎯 ENQUADRAMENTO EXATO: LARGURA 100% INTEGRAL (NÃO CORTA NENHUMA COLUNA OU PERSONAGEM) */}
         <div 
-          className="w-full h-full relative overflow-hidden flex items-center justify-center pointer-events-auto"
+          className={`w-full h-full relative overflow-hidden flex items-center justify-center ${isBalanceInsufficient ? 'pointer-events-none' : 'pointer-events-auto'}`}
           style={{
             // Altura expandida em 42px para empurrar o rodapé de crédito demo para baixo do footer
             marginTop: '0px',
