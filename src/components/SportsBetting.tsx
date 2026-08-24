@@ -386,7 +386,8 @@ export default function SportsBetting({ balance, onUpdateBalance, onOpenDeposit 
       }
 
       const cat = soccerMatches.filter((m) => m.category === soccerFilter && !m.isFinished);
-      const deduped = filterNextMatchPerTeam(cat as any) as Match[];
+      const listToUse = cat.length > 0 ? cat : soccerMatches.filter(m => !m.isFinished);
+      const deduped = filterNextMatchPerTeam(listToUse as any) as Match[];
       if (q) return deduped.filter(m => m.homeTeam.toLowerCase().includes(q) || m.awayTeam.toLowerCase().includes(q) || m.league.toLowerCase().includes(q));
       return deduped;
     }
@@ -1229,7 +1230,14 @@ export default function SportsBetting({ balance, onUpdateBalance, onOpenDeposit 
                 {searchQuery ? `Nenhum evento encontrado para "${searchQuery}".` : 'Nenhum confronto programado nesta categoria no momento.'}
               </p>
               <button
-                onClick={() => { setSearchQuery(''); }}
+                onClick={() => { 
+                  setSearchQuery('');
+                  if (activeSport === 'SOCCER') {
+                    setSoccerFilter('BRASILEIRAO');
+                    setSoccerMarketTab('1X2');
+                  }
+                  fetchAllSportsData(true);
+                }}
                 className="mt-2 px-4 py-2 bg-amber-400 text-black font-black text-xs rounded-xl cursor-pointer hover:brightness-105 transition"
               >
                 Ver Todos os Eventos
