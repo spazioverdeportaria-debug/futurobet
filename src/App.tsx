@@ -367,12 +367,13 @@ function FuturoBetContent() {
           onSuccessDeposit={handleDepositSuccess}
         />
 
-        {/* DAILY PRIZE WHEEL MODAL */}
+        {/* DAILY PRIZE WHEEL MODAL (R$ 2,50 PAGO) */}
         <DailyPrizeWheel
           isOpen={isWheelOpen}
           onClose={() => setIsWheelOpen(false)}
           balance={balance}
           onUpdateBalance={(newBal) => handleUpdateBalance(newBal)}
+          onOpenDeposit={handleOpenDeposit}
         />
 
         {/* PERFIL DO USUÁRIO & LOGOUT SEGURO COM CONFIRMAÇÃO */}

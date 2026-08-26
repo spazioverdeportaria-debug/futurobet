@@ -2,9 +2,10 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   X, QrCode, Copy, Check, ShieldCheck, Zap, RefreshCw, 
   Clock, CheckCircle2, Sparkles, Lock, ArrowRight, 
-  Loader2, Hourglass, Shield, HelpCircle
+  Loader2, Hourglass, Shield, HelpCircle, User, Key
 } from 'lucide-react';
 import { soundEngine } from '../utils/audio';
+import { generatePixPayload, DEFAULT_PIX_KEY, DEFAULT_PIX_NAME } from '../lib/syncpay';
 import vegasBetLuxuryLogo from '../assets/images/vegasbet_luxury_logo_1786891904925.jpg';
 
 interface DepositModalProps {
@@ -132,30 +133,31 @@ export default function DepositModal({ isOpen, onClose, onSuccessDeposit }: Depo
 
       const data = await response.json();
 
-      if (data.success) {
+      if (data && data.success && data.pixCode) {
         setPixData(data);
         setShowPixScreen(true);
         setTimeLeft(900);
       } else {
-        setErrorMessage(data.error || 'Falha ao gerar PIX no SysPay.');
+        throw new Error(data?.error || 'Fallback direct Pix generation');
       }
     } catch (err: any) {
-      console.error('Error calling /api/syncpay/deposit:', err);
-      // Fallback standard QR & Code
-      const receiveKey = 'cd96e0ab-1a2f-4b28-8a45-caf37dd6069e';
-      const cleanAmountStr = finalAmount.toFixed(2);
-      const formattedCents = cleanAmountStr.replace('.', '');
-      const pixCode = `00020126580014BR.GOV.BCB.PIX0136${receiveKey}520400005303986540${formattedCents}5802BR5916FUTUROBET_CASINO6009SAO_PAULO62070503${Date.now().toString().slice(-8)}6304`;
+      console.warn('Using instant direct PicPay / PIX generator:', err);
+      // Valid BR Code PIX (Copia e Cola & QR Code) pointing to GABRIEL DA LUZ CARVALHO
+      const pixCode = generatePixPayload({
+        amount: finalAmount,
+        txId: 'Administrativo',
+        description: 'FuturoBet',
+      });
       
       setPixData({
-        transactionId: `SYS_${Date.now()}`,
+        transactionId: `PIX_${Date.now()}`,
         amount: finalAmount,
         pixCode,
-        qrCodeUrl: `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(pixCode)}`,
+        qrCodeUrl: `https://api.qrserver.com/v1/create-qr-code/?size=320x320&margin=8&data=${encodeURIComponent(pixCode)}`,
         expiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
         isSimulated: false,
         status: 'PENDING',
-        gatewayMessage: 'PIX SysPay gerado com sucesso.',
+        gatewayMessage: 'PIX gerado para GABRIEL DA LUZ CARVALHO (FuturoBet)',
       });
       setShowPixScreen(true);
       setTimeLeft(900);
@@ -485,19 +487,37 @@ export default function DepositModal({ isOpen, onClose, onSuccessDeposit }: Depo
                     {pixData?.qrCodeUrl ? (
                       <img
                         src={pixData.qrCodeUrl}
-                        alt="QR Code PIX SysPay"
+                        alt="QR Code PIX FuturoBet"
                         className="w-full h-full object-contain rounded-lg select-none pointer-events-none"
                       />
                     ) : (
                       <div className="w-full h-full border-2 border-dashed border-zinc-400 rounded-lg flex flex-col items-center justify-center text-zinc-800">
                         <QrCode className="w-14 h-14 text-zinc-700 mb-1" />
-                        <span className="text-[10px] font-black uppercase">PIX SYSPAY</span>
+                        <span className="text-[10px] font-black uppercase">PIX FUTUROBET</span>
                       </div>
                     )}
                   </div>
                   <span className="text-[10px] font-semibold text-zinc-400 mt-2">
-                    Abra o app do banco e escaneie o QR Code acima
+                    Abra o app do seu banco e escaneie o QR Code acima
                   </span>
+                </div>
+
+                {/* Beneficiary Details Badge */}
+                <div className="p-2.5 rounded-xl bg-zinc-950/80 border border-zinc-800 text-[10.5px] space-y-1">
+                  <div className="flex items-center justify-between text-zinc-400">
+                    <span className="flex items-center gap-1 text-zinc-400 font-bold">
+                      <User className="w-3 h-3 text-amber-400" />
+                      Destinatário:
+                    </span>
+                    <strong className="text-white font-extrabold">{DEFAULT_PIX_NAME}</strong>
+                  </div>
+                  <div className="flex items-center justify-between text-zinc-400">
+                    <span className="flex items-center gap-1 text-zinc-400 font-bold">
+                      <Key className="w-3 h-3 text-emerald-400" />
+                      Identificação:
+                    </span>
+                    <span className="text-emerald-400 font-mono font-bold">FuturoBet / Administrativo</span>
+                  </div>
                 </div>
 
                 {/* PIX Copia e Cola Section */}

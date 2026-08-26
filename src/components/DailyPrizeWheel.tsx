@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
-import { Sparkles, ArrowLeft, Zap, Frown, Clock, CheckCircle2, Lock, Gift } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { 
+  Sparkles, ArrowLeft, Zap, Frown, Clock, CheckCircle2, 
+  Lock, Gift, Trophy, Plus, ShieldCheck, Smartphone, Tv, Car, DollarSign
+} from 'lucide-react';
 import { soundEngine } from '../utils/audio';
-import { useAuth } from '../context/AuthContext';
-
-import wheelDiscImg from '../assets/images/wheel_disc_3d_1785703882307.jpg';
+import wheelDiscImg from '../assets/images/wheel_disc_full_1787774201308.jpg';
 import iphoneTrioImg from '../assets/images/iphone_trio_group_1785703563180.jpg';
 import moneyPixImg from '../assets/images/money_pix_stack_1785703547306.jpg';
 
@@ -12,221 +13,231 @@ interface DailyPrizeWheelProps {
   onClose: () => void;
   balance: number;
   onUpdateBalance: (newBalance: number) => void;
+  onOpenDeposit?: () => void;
 }
 
 export interface WheelSegment {
   id: number;
   label: string;
-  type: 'cash' | 'device' | 'retry';
+  type: 'cash' | 'device' | 'car' | 'tv' | 'retry';
   value: number;
-  image: string;
+  image?: string;
   isWin: boolean;
 }
 
-// 5 Wheel Segments aligned with the disc geometry (72 deg per slice)
+// 8 Segments matching the wheel layout (45° per slice)
+// 0: iPhone (Top: 0°)
+// 1: Tente Novamente (45°)
+// 2: Carro 0KM (90°)
+// 3: Tente Novamente (135°)
+// 4: R$ 1.000 PIX (180°)
+// 5: Tente Novamente (225°)
+// 6: Smart TV 60" (270°)
+// 7: Tente Novamente (315°)
 const SEGMENTS: WheelSegment[] = [
-  {
-    id: 0,
-    label: 'IPHONE',
-    type: 'device',
-    value: 0,
-    image: iphoneTrioImg,
-    isWin: true,
-  },
-  {
-    id: 1,
-    label: 'Tente de Novo',
-    type: 'retry',
-    value: 0,
-    image: '',
-    isWin: false,
-  },
-  {
-    id: 2,
-    label: 'R$ 1.000',
-    type: 'cash',
-    value: 1000,
-    image: moneyPixImg,
-    isWin: true,
-  },
-  {
-    id: 3,
-    label: 'IPHONE',
-    type: 'device',
-    value: 0,
-    image: iphoneTrioImg,
-    isWin: true,
-  },
-  {
-    id: 4,
-    label: 'Tente de Novo',
-    type: 'retry',
-    value: 0,
-    image: '',
-    isWin: false,
-  },
+  { id: 0, label: 'IPHONE 15 PRO', type: 'device', value: 0, image: iphoneTrioImg, isWin: true },
+  { id: 1, label: 'TENTE NOVAMENTE', type: 'retry', value: 0, isWin: false },
+  { id: 2, label: 'CARRO 0KM', type: 'car', value: 0, isWin: true },
+  { id: 3, label: 'TENTE NOVAMENTE', type: 'retry', value: 0, isWin: false },
+  { id: 4, label: 'R$ 1.000 NO PIX', type: 'cash', value: 1000, image: moneyPixImg, isWin: true },
+  { id: 5, label: 'TENTE NOVAMENTE', type: 'retry', value: 0, isWin: false },
+  { id: 6, label: 'SMART TV 60"', type: 'tv', value: 0, isWin: true },
+  { id: 7, label: 'TENTE NOVAMENTE', type: 'retry', value: 0, isWin: false },
 ];
 
-export default function DailyPrizeWheel({ isOpen, onClose, balance, onUpdateBalance }: DailyPrizeWheelProps) {
-  const { account, setLastSpinDate } = useAuth();
+const SPIN_COST = 2.50;
+
+// Dynamic realistic non-repeating winners pool (sem carros, prêmios realistas e sérios)
+const WINNERS_DATABASE = [
+  { name: 'João Carlos Silva', prize: 'R$ 1.000 no PIX', type: 'cash', city: 'SP' },
+  { name: 'Joanita Oliveira', prize: 'iPhone 15 Pro Max', type: 'iphone', city: 'MG' },
+  { name: 'Marcos Vinícius Souza', prize: 'R$ 500 no PIX', type: 'cash', city: 'RJ' },
+  { name: 'Camila Santos Ferreira', prize: 'Smart TV 60" 4K', type: 'tv', city: 'PR' },
+  { name: 'Lucas Gabriel Pereira', prize: 'R$ 1.000 no PIX', type: 'cash', city: 'BA' },
+  { name: 'Larissa Mendes Duarte', prize: 'iPhone 15 Pro Max', type: 'iphone', city: 'RS' },
+  { name: 'Rafael Costa Lima', prize: 'R$ 1.000 no PIX', type: 'cash', city: 'CE' },
+  { name: 'Fernanda Rocha Batista', prize: 'Smart TV 60" 4K', type: 'tv', city: 'GO' },
+  { name: 'Bruno Henrique Ramos', prize: 'R$ 250 no PIX', type: 'cash', city: 'PE' },
+  { name: 'Patrícia Cristina Dias', prize: 'iPhone 15 Pro Max', type: 'iphone', city: 'SC' },
+  { name: 'Diego Santana Carvalho', prize: 'R$ 500 no PIX', type: 'cash', city: 'DF' },
+  { name: 'Amanda Vieira Gomes', prize: 'R$ 1.000 no PIX', type: 'cash', city: 'ES' },
+  { name: 'Rodrigo Albuquerque', prize: 'Smart TV 60" 4K', type: 'tv', city: 'AM' },
+  { name: 'Juliana Prado Silveira', prize: 'R$ 1.000 no PIX', type: 'cash', city: 'MT' },
+  { name: 'Gabriel Zanin Ribeiro', prize: 'iPhone 15 Pro Max', type: 'iphone', city: 'MS' },
+  { name: 'Tatiane Barbosa', prize: 'R$ 500 no PIX', type: 'cash', city: 'PA' },
+  { name: 'Wesley Moreira Santos', prize: 'Smart TV 60" 4K', type: 'tv', city: 'RN' },
+  { name: 'Vanessa Nogueira', prize: 'iPhone 15 Pro Max', type: 'iphone', city: 'PB' },
+  { name: 'Thiago Farias Lima', prize: 'R$ 1.000 no PIX', type: 'cash', city: 'AL' },
+  { name: 'Karina Bittencourt', prize: 'R$ 500 no PIX', type: 'cash', city: 'SE' },
+];
+
+export default function DailyPrizeWheel({ 
+  isOpen, 
+  onClose, 
+  balance, 
+  onUpdateBalance,
+  onOpenDeposit 
+}: DailyPrizeWheelProps) {
   const [isSpinning, setIsSpinning] = useState(false);
   const [rotationDegree, setRotationDegree] = useState(0);
   const [spinCount, setSpinCount] = useState(0);
   const [resultPrize, setResultPrize] = useState<WheelSegment | null>(null);
   const [showResultModal, setShowResultModal] = useState(false);
-  const [timeUntilMidnight, setTimeUntilMidnight] = useState('');
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  // Daily spin verification (1 spin per day strictly)
-  const todayStr = new Date().toISOString().slice(0, 10);
-  const lastSpin = account?.lastDailySpin || localStorage.getItem('vegasbet_last_daily_spin');
-  const hasSpunToday = lastSpin === todayStr;
+  // Live winners non-repeating ticker state
+  const [currentWinnerIndex, setCurrentWinnerIndex] = useState(0);
+  const [secondsAgo, setSecondsAgo] = useState(12);
 
-  // Countdown timer to next midnight (00:00)
+  // Rotate winners ticker every 3.8 seconds without repeating
   useEffect(() => {
-    const updateCountdown = () => {
-      const now = new Date();
-      const nextMidnight = new Date();
-      nextMidnight.setHours(24, 0, 0, 0);
-      const diff = Math.max(0, nextMidnight.getTime() - now.getTime());
+    if (!isOpen) return;
 
-      const hours = Math.floor(diff / (1000 * 60 * 60));
-      const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-      const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+    const interval = setInterval(() => {
+      setCurrentWinnerIndex((prev) => (prev + 1) % WINNERS_DATABASE.length);
+      // Random authentic recent time (8s to 45s)
+      setSecondsAgo(Math.floor(Math.random() * 35) + 8);
+    }, 3800);
 
-      setTimeUntilMidnight(
-        `${String(hours).padStart(2, '0')}h ${String(minutes).padStart(2, '0')}m ${String(seconds).padStart(2, '0')}s`
-      );
-    };
-
-    updateCountdown();
-    const interval = setInterval(updateCountdown, 1000);
     return () => clearInterval(interval);
-  }, []);
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
+  const currentWinner = WINNERS_DATABASE[currentWinnerIndex];
+
   const handleSpinWheel = () => {
-    if (isSpinning || hasSpunToday) return;
+    if (isSpinning) return;
 
+    // Check if user has sufficient balance (R$ 2,50)
+    if (balance < SPIN_COST) {
+      soundEngine.playCashierBeep();
+      setErrorMessage(`Saldo insuficiente (R$ ${balance.toFixed(2)}). Você precisa de R$ 2,50 para girar a roleta.`);
+      return;
+    }
+
+    setErrorMessage(null);
     setIsSpinning(true);
-    soundEngine.playWheelSpinSequence(8);
 
-    // Target "Tente de Novo" (Left seal at 288° or Right seal at 72° in the wheel disk)
-    // To align slice at angle θ with top pointer (0°), rotation R mod 360 must be (360 - θ):
-    // For Right "Tente de Novo" (θ = 72°): target rotation = 288° (or -72°)
-    // For Left "Tente de Novo" (θ = 288°): target rotation = 72° (or -288°)
-    const retryAngles = [288, 72];
-    const targetSliceAngle = retryAngles[Math.floor(Math.random() * retryAngles.length)];
-    const chosenPrize = SEGMENTS[1]; // "Tente de Novo"
+    // Deduct R$ 2,50 immediately from user balance
+    const newBal = Number(Math.max(0, balance - SPIN_COST).toFixed(2));
+    onUpdateBalance(newBal);
+    soundEngine.playSpinSound();
+    soundEngine.playWheelSpinSequence(7);
 
-    // Continuous smooth forward rotation degree formula over ~8 seconds
-    const fullSpins = 12; // 12 full high-speed spins for authentic 8s suspense
+    // House edge retention target: Lands on one of the 4 "TENTE NOVAMENTE" segments
+    // Slices at 45°, 135°, 225°, 315°
+    const retrySlices = [
+      { angle: 45, segment: SEGMENTS[1] },
+      { angle: 135, segment: SEGMENTS[3] },
+      { angle: 225, segment: SEGMENTS[5] },
+      { angle: 315, segment: SEGMENTS[7] },
+    ];
+    const chosenRetry = retrySlices[Math.floor(Math.random() * retrySlices.length)];
+    const chosenPrize = chosenRetry.segment;
+
+    // Continuous smooth forward rotation degree formula over 7.5 seconds
+    const fullSpins = 10; // 10 high-speed revolutions for suspense
     const currentModulo = rotationDegree % 360;
+    // To align slice at angle θ with top pointer (0°), target rotation = (360 - θ)
+    const targetSliceAngle = (360 - chosenRetry.angle) % 360;
     const additionalDegrees = (360 - currentModulo + targetSliceAngle) % 360;
     const targetAngle = rotationDegree + 360 * fullSpins + (additionalDegrees === 0 ? 360 : additionalDegrees);
 
     setRotationDegree(targetAngle);
     setSpinCount((prev) => prev + 1);
 
-    // After 8s spin animation finishes smoothly
+    // After 7.5s animation completes
     setTimeout(() => {
       setIsSpinning(false);
       setResultPrize(chosenPrize);
 
-      // Record daily spin completed
-      localStorage.setItem('vegasbet_last_daily_spin', todayStr);
-      setLastSpinDate(todayStr);
-
       if (chosenPrize.isWin) {
         soundEngine.playWinChime();
         if (chosenPrize.type === 'cash' && chosenPrize.value > 0) {
-          onUpdateBalance(Number((balance + chosenPrize.value).toFixed(2)));
+          onUpdateBalance(Number((newBal + chosenPrize.value).toFixed(2)));
         }
+      } else {
+        soundEngine.playCashierBeep();
       }
 
       setShowResultModal(true);
-    }, 8000);
+    }, 7500);
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-[#070401] text-white flex flex-col justify-between items-center overflow-y-auto select-none font-sans p-2">
+    <div className="fixed inset-0 z-50 bg-[#030717] text-white flex flex-col justify-between items-center overflow-y-auto select-none font-sans p-2">
       
-      {/* 1. CASINO BOKEH & GOLD RAYS BACKGROUND */}
-      <div className="fixed inset-0 pointer-events-none overflow-hidden z-0">
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[900px] h-[900px] bg-[repeating-conic-gradient(from_0deg,rgba(255,215,0,0.08)_0deg_15deg,transparent_15deg_30deg)] rounded-full animate-[spin_120s_linear_infinite] blur-md opacity-80" />
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[700px] bg-[radial-gradient(circle,rgba(245,158,11,0.28)_0%,rgba(180,83,9,0.12)_40%,transparent_70%)] rounded-full blur-3xl" />
+      {/* 1. DEEP ROYAL BLUE LUXURY CASINO BACKGROUND */}
+      <div className="fixed inset-0 pointer-events-none overflow-hidden z-0 bg-[#050C22]">
+        {/* Subtle Watermark Pattern */}
+        <div className="absolute inset-0 opacity-[0.06] bg-[radial-gradient(#ffd700_1px,transparent_1px)] [background-size:24px_24px]" />
+        
+        {/* Floating golden glow orbs */}
+        <div className="absolute top-10 left-1/2 -translate-x-1/2 w-[600px] h-[600px] bg-[radial-gradient(circle,rgba(30,58,138,0.5)_0%,rgba(14,24,64,0.3)_45%,transparent_75%)] rounded-full blur-3xl" />
+        <div className="absolute bottom-10 left-1/2 -translate-x-1/2 w-[500px] h-[500px] bg-[radial-gradient(circle,rgba(245,158,11,0.15)_0%,transparent_70%)] rounded-full blur-3xl" />
       </div>
 
-      {/* 2. TOP NAV BAR WITH 3D GOLDEN BACK BUTTON */}
-      <div className="w-full max-w-md px-2 pt-3 pb-2 flex items-center justify-between relative z-20">
+      {/* 2. TOP NAV BAR WITH BACK BUTTON & USER BALANCE PILL */}
+      <div className="w-full max-w-md px-3 pt-2 pb-0 flex items-center justify-between relative z-20">
+        {/* Golden Back Button */}
         <button
           onClick={onClose}
-          className="relative group cursor-pointer active:translate-y-1 transition-all duration-150"
+          id="btn-close-roleta"
+          className="w-9 h-9 rounded-xl bg-gradient-to-b from-[#1e2c4d] to-[#0a1226] border border-amber-400/60 flex items-center justify-center text-amber-400 hover:brightness-125 active:scale-95 transition cursor-pointer shadow-md"
         >
-          {/* 3D Drop Shadow Base */}
-          <div className="absolute inset-0 rounded-2xl bg-[#3d2400] translate-y-1.5 shadow-[0_6px_12px_rgba(0,0,0,0.9)]" />
-          <div className="relative px-4 py-2 bg-gradient-to-b from-[#fff6be] via-[#f7b700] to-[#8f5a00] border-2 border-[#fffde0] text-black font-black rounded-2xl flex items-center gap-2 text-xs shadow-[inset_0_2px_4px_rgba(255,255,255,0.95),inset_0_-2px_4px_rgba(0,0,0,0.4)]">
-            <ArrowLeft size={16} className="text-black stroke-[3] drop-shadow-[0_1px_1px_rgba(255,255,255,0.8)]" />
-            <span className="uppercase tracking-tight drop-shadow-[0_1px_1px_rgba(255,255,255,0.8)] font-black">
-              Voltar ao Cassino
-            </span>
-          </div>
+          <ArrowLeft size={18} className="stroke-[2.5]" />
         </button>
 
-        {/* Daily Status Indicator */}
-        <div className="flex items-center gap-1.5 bg-black/70 border border-amber-500/40 px-3 py-1.5 rounded-2xl">
-          {hasSpunToday ? (
-            <span className="text-[10px] text-zinc-400 font-extrabold flex items-center gap-1">
-              <CheckCircle2 size={13} className="text-emerald-400" />
-              Giro Utilizado (0/1)
-            </span>
-          ) : (
-            <span className="text-[10px] text-emerald-300 font-extrabold flex items-center gap-1">
-              <Sparkles size={13} className="text-amber-400 animate-pulse" />
-              Disponível (1/1)
-            </span>
+        {/* User Balance & Quick Deposit Pill */}
+        <div className="flex items-center gap-1.5 bg-[#091330]/95 border border-amber-500/60 px-3 py-1.5 rounded-full shadow-lg">
+          <span className="text-[11px] text-zinc-300 font-bold">Saldo:</span>
+          <span className="text-xs sm:text-sm font-black text-amber-400 font-mono">
+            R$ {balance.toFixed(2)}
+          </span>
+          {onOpenDeposit && (
+            <button
+              onClick={onOpenDeposit}
+              className="ml-0.5 w-5 h-5 bg-amber-400 hover:bg-amber-300 text-black rounded-full font-black text-xs flex items-center justify-center transition active:scale-90 shadow"
+              title="Recarregar Saldo"
+            >
+              <Plus size={11} className="stroke-[3]" />
+            </button>
           )}
         </div>
       </div>
 
-      {/* 3. HEADLINE SECTION */}
-      <div className="w-full max-w-md text-center px-4 pt-1 pb-1 relative z-20 space-y-1.5">
-        <div className="inline-flex items-center gap-1.5 px-4 py-1 bg-gradient-to-b from-[#ffea85] via-[#ffd54f] to-[#ffb300] border-2 border-[#fff8e1] rounded-full text-black font-black text-[11px] uppercase tracking-wider shadow-[0_4px_12px_rgba(245,158,11,0.7),inset_0_2px_4px_rgba(255,255,255,0.95),inset_0_-2px_4px_rgba(180,83,9,0.5)]">
-          <Gift size={13} className="fill-black stroke-black" />
-          <span className="drop-shadow-[0_1px_1px_rgba(255,255,255,0.7)] font-black">
-            1 GIRO GRÁTIS POR DIA
-          </span>
-        </div>
-
-        <h1 className="text-2xl sm:text-3xl font-black uppercase tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-amber-100 via-yellow-200 to-amber-300 drop-shadow-[0_4px_12px_rgba(245,158,11,0.8)]">
+      {/* 3. HEADER & TITLE SECTION (HARMONIC SPACING) */}
+      <div className="w-full max-w-md text-center px-4 pt-1.5 pb-0 relative z-20">
+        <h1 className="text-xl sm:text-2xl font-black uppercase tracking-tight text-transparent bg-clip-text bg-gradient-to-b from-[#fff7d1] via-[#ffd54f] to-[#e69b00] drop-shadow-[0_2px_12px_rgba(245,158,11,0.85)]">
           ROLETA DIÁRIA DE PRÊMIOS
         </h1>
-        <p className="text-xs text-amber-200/90 font-medium max-w-xs mx-auto">
-          Gire diariamente e ganhe prêmios no Pix e iPhones!
+        <p className="text-[11.5px] sm:text-xs text-amber-200/90 font-medium max-w-xs mx-auto mt-0.5">
+          Gire por apenas R$ 2,50 e ganhe prêmios no Pix e iPhones!
         </p>
       </div>
 
-      {/* 4. THE CASINO WHEEL CONTAINER */}
-      <div className="relative w-[320px] sm:w-[340px] h-[320px] sm:h-[340px] my-2 flex items-center justify-center relative z-20 shrink-0">
+      {/* 4. THE CASINO WHEEL (NO GAP BETWEEN BORDER & PRIZE DISC) */}
+      <div className="relative w-[90vw] max-w-[360px] aspect-square my-auto flex items-center justify-center relative z-20 shrink-0">
         
         {/* Outer Glow Halo */}
-        <div className="absolute inset-[-20px] bg-[radial-gradient(circle,rgba(255,215,0,0.55)_0%,transparent_70%)] rounded-full blur-2xl animate-pulse pointer-events-none" />
+        <div className="absolute inset-[-15px] bg-[radial-gradient(circle,rgba(255,215,0,0.45)_0%,transparent_70%)] rounded-full blur-xl pointer-events-none" />
 
-        {/* Outer Skeuomorphic Brass/Gold Frame Rim */}
-        <div className="absolute w-[320px] sm:w-[340px] h-[320px] sm:h-[340px] rounded-full bg-gradient-to-br from-[#ffd977] via-[#b88e34] to-[#422e08] shadow-[0_30px_80px_rgba(0,0,0,0.98),inset_0_10px_25px_rgba(255,255,255,0.9),inset_0_-10px_25px_rgba(0,0,0,0.95)] border-[5px] border-[#fff7c2] flex items-center justify-center">
+        {/* Thinner, Elegant Outer Brass/Gold Frame Rim */}
+        <div className="absolute w-full h-full rounded-full bg-gradient-to-br from-[#ffd977] via-[#b88e34] to-[#422e08] shadow-[0_20px_60px_rgba(0,0,0,0.95),inset_0_4px_10px_rgba(255,255,255,0.9),inset_0_-4px_10px_rgba(0,0,0,0.95)] border-[2.5px] border-[#fff7c2] flex items-center justify-center">
           
-          {/* Glowing Casino Lights Around Rim */}
+          {/* Subtle Glowing Casino Lights Around Thin Rim */}
           <div className="absolute inset-0 rounded-full flex items-center justify-center pointer-events-none z-20">
-            <div className="w-full h-full absolute animate-[spin_40s_linear_infinite]">
-              {Array.from({ length: 10 }).map((_, i) => {
-                const angle = i * 36;
+            <div className="w-full h-full absolute">
+              {Array.from({ length: 12 }).map((_, i) => {
+                const angle = i * 30;
                 return (
                   <div
                     key={i}
-                    className="absolute w-3.5 h-3.5 sm:w-4 sm:h-4 rounded-full bg-white shadow-[0_0_15px_#fff,0_0_25px_#ffd700] border-2 border-[#ffeb99]"
+                    className="absolute w-3 h-3 rounded-full bg-white shadow-[0_0_10px_#fff,0_0_16px_#ffd700] border border-[#ffeb99]"
                     style={{
-                      top: `calc(50% - 7px + ${150 * Math.sin((angle * Math.PI) / 180)}px)`,
-                      left: `calc(50% - 7px + ${150 * Math.cos((angle * Math.PI) / 180)}px)`,
+                      top: `calc(50% - 6px + calc(48.5% * ${Math.sin((angle * Math.PI) / 180)}))`,
+                      left: `calc(50% - 6px + calc(48.5% * ${Math.cos((angle * Math.PI) / 180)}))`,
                     }}
                   />
                 );
@@ -234,100 +245,110 @@ export default function DailyPrizeWheel({ isOpen, onClose, balance, onUpdateBala
             </div>
           </div>
 
-          {/* Inner Wheel Disc Holder */}
-          <div className="w-[280px] sm:w-[296px] h-[280px] sm:h-[296px] rounded-full border-[6px] border-[#ffe484] relative overflow-hidden shadow-[inset_0_15px_35px_rgba(0,0,0,0.95)] bg-[#100903]">
+          {/* Inner Wheel Disc Holder - Full Fit 97% Seamless to Outer Rim (No Gap) */}
+          <div className="w-[97%] h-[97%] rounded-full relative overflow-hidden flex items-center justify-center shadow-[inset_0_4px_12px_rgba(0,0,0,0.8)]">
             
-            {/* ROTATING 3D WHEEL DISC */}
+            {/* ROTATING 3D WHEEL DISC WITH 8 SECTORS */}
             <div
-              className="w-full h-full rounded-full transition-transform duration-[8000ms] cubic-bezier(0.15, 0.95, 0.2, 1) flex items-center justify-center"
+              className="w-full h-full rounded-full transition-transform duration-[7500ms] cubic-bezier(0.15, 0.95, 0.2, 1) flex items-center justify-center"
               style={{
                 transform: `rotate(${rotationDegree}deg)`,
               }}
             >
               <img
                 src={wheelDiscImg}
-                alt="Roleta de Prêmios"
+                alt="Roleta de Prêmios FuturoBet"
                 referrerPolicy="no-referrer"
-                className="w-full h-full object-cover rounded-full"
+                className="w-full h-full object-cover scale-[1.01] rounded-full select-none pointer-events-none"
               />
             </div>
 
           </div>
 
-          {/* CENTER 3D DIAMOND GEAR HUB */}
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-18 h-18 sm:w-20 sm:h-20 rounded-full bg-gradient-to-br from-[#fff7c2] via-[#e2b028] to-[#543b02] shadow-[0_15px_35px_rgba(0,0,0,0.95),inset_0_6px_12px_rgba(255,255,255,0.9)] border-[4px] border-[#ffe484] z-30 flex items-center justify-center">
-            <div className="w-12 h-12 sm:w-13 sm:h-13 rounded-full bg-gradient-to-br from-[#8a610f] via-[#d4af37] to-[#402a00] border-2 border-[#ffd700] flex items-center justify-center text-xl sm:text-2xl shadow-[inset_0_4px_8px_rgba(0,0,0,0.8)]">
-              💎
-            </div>
+          {/* 🔥 BOTÃO CENTRAL DE GIRAR (ELEGANTE, METÁLICO DOURADO SEM PISCAR) */}
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-30 flex items-center justify-center pointer-events-auto">
+            <button
+              id="btn-spin-wheel-center"
+              onClick={handleSpinWheel}
+              disabled={isSpinning}
+              className={`w-20 h-20 sm:w-22 sm:h-22 rounded-full font-black uppercase tracking-wider transition-all duration-150 flex flex-col items-center justify-center cursor-pointer relative overflow-hidden select-none border-[3px] border-[#ffeaa7] shadow-[0_6px_20px_rgba(0,0,0,0.95),0_0_20px_rgba(245,158,11,0.6),inset_0_2px_4px_rgba(255,255,255,0.9),inset_0_-4px_8px_rgba(110,50,0,0.8)] ${
+                isSpinning
+                  ? 'bg-gradient-to-b from-[#e5b22b] via-[#c68912] to-[#734a00] text-black scale-95 opacity-90 cursor-wait'
+                  : 'bg-gradient-to-b from-[#fff399] via-[#f7b700] to-[#b36b00] text-black hover:brightness-110 active:scale-95'
+              }`}
+            >
+              {/* Gloss highlight */}
+              <div className="absolute top-0 left-0 right-0 h-1/2 bg-gradient-to-b from-white/50 to-transparent pointer-events-none rounded-t-full" />
+
+              {isSpinning ? (
+                <span className="font-serif font-black text-[11px] uppercase tracking-tight text-black leading-tight text-center">
+                  GIRANDO...
+                </span>
+              ) : (
+                <>
+                  <span className="font-serif font-black text-base sm:text-lg tracking-tight leading-none text-black drop-shadow-[0_1px_1px_rgba(255,255,255,0.8)]">
+                    GIRAR
+                  </span>
+                  <span className="text-[8.5px] sm:text-[9px] font-mono font-black text-black bg-amber-200/90 px-2 py-0.5 rounded-full mt-0.5 shadow-inner border border-amber-400/50">
+                    R$ 2,50
+                  </span>
+                </>
+              )}
+            </button>
           </div>
 
           {/* TOP BRASS ARROW POINTER WITH EMERALD GEM */}
-          <div className="absolute -top-6 left-1/2 -translate-x-1/2 z-40 flex flex-col items-center filter drop-shadow-[0_12px_15px_rgba(0,0,0,0.98)]">
-            <div className="w-12 h-11 bg-gradient-to-b from-[#fff7c2] via-[#d4af37] to-[#543b02] rounded-t-2xl border-2 border-[#fff1a0] relative shadow-inner flex justify-center items-center p-1">
-              <div className="w-5 h-5 rounded-md bg-gradient-to-br from-emerald-300 via-emerald-500 to-emerald-900 border-2 border-emerald-200 shadow-[0_0_12px_rgba(16,185,129,0.9)] transform rotate-45 flex items-center justify-center" />
+          <div className="absolute -top-5 left-1/2 -translate-x-1/2 z-40 flex flex-col items-center filter drop-shadow-[0_8px_12px_rgba(0,0,0,0.98)] pointer-events-none">
+            <div className="w-10 h-9 bg-gradient-to-b from-[#fff7c2] via-[#d4af37] to-[#543b02] rounded-t-xl border border-[#fff1a0] relative shadow-inner flex justify-center items-center p-1">
+              <div className="w-4 h-4 rounded-md bg-gradient-to-br from-emerald-300 via-emerald-500 to-emerald-900 border border-emerald-200 shadow-[0_0_10px_rgba(16,185,129,0.9)] transform rotate-45 flex items-center justify-center" />
             </div>
-            <div className="w-0 h-0 border-l-[22px] border-l-transparent border-r-[22px] border-r-transparent border-t-[28px] border-t-[#d4af37] -mt-1 relative z-10" />
+            <div className="w-0 h-0 border-l-[18px] border-l-transparent border-r-[18px] border-r-transparent border-t-[22px] border-t-[#d4af37] -mt-1 relative z-10" />
           </div>
 
         </div>
 
       </div>
 
-      {/* 5. COOLDOWN BANNER OR 3D CASINO GOLD CTA SPIN BUTTON */}
-      <div className="w-full max-w-md px-4 pb-4 pt-1 relative z-20 space-y-2">
-        
-        {hasSpunToday ? (
-          <div className="p-3 bg-[#130d07] border-2 border-amber-500/40 rounded-2xl text-center space-y-1.5 shadow-xl">
-            <div className="flex items-center justify-center gap-1.5 text-amber-300 font-black text-xs uppercase tracking-wide">
-              <Lock size={15} className="text-amber-400" />
-              <span>Giro Diário Realizado com Sucesso</span>
-            </div>
-            <p className="text-[11px] text-zinc-300 leading-snug">
-              Você já usou seu 1 giro diário hoje. O próximo giro gratuito será liberado em:
-            </p>
-            <div className="inline-flex items-center gap-1.5 bg-black/80 border border-amber-500/40 px-3 py-1.5 rounded-xl font-mono text-sm font-black text-amber-300">
-              <Clock size={14} className="text-amber-400 animate-spin" />
-              <span>{timeUntilMidnight}</span>
-            </div>
-            <button
-              onClick={onClose}
-              className="w-full mt-2 py-2.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-zinc-300 font-bold text-xs uppercase rounded-xl transition cursor-pointer"
-            >
-              Voltar ao Cassino
-            </button>
-          </div>
-        ) : (
-          <div className="p-2 rounded-[28px] bg-gradient-to-b from-[#5c3e03] via-[#241500] to-[#0d0700] border-2 border-[#ffd700]/70 shadow-[0_20px_45px_rgba(0,0,0,0.95)]">
-            <button
-              onClick={handleSpinWheel}
-              disabled={isSpinning}
-              className={`w-full h-16 rounded-[22px] font-black text-xl uppercase tracking-wider transition-all duration-150 flex items-center justify-center gap-3 cursor-pointer relative overflow-hidden select-none border-2 border-[#fffde0] ${
-                isSpinning
-                  ? 'bg-gradient-to-b from-[#ffec85] via-[#d4990d] to-[#734a00] text-black translate-y-1 shadow-[0_2px_0_#4a2e00] opacity-90 cursor-wait'
-                  : 'bg-gradient-to-b from-[#fff399] via-[#f7b700] to-[#a36200] text-black shadow-[0_8px_0_#4a2e00,0_15px_30px_rgba(245,158,11,0.8),inset_0_3px_6px_rgba(255,255,255,0.95),inset_0_-4px_8px_rgba(120,60,0,0.6)] hover:brightness-110 active:translate-y-1.5 active:shadow-[0_2px_0_#4a2e00]'
-              }`}
-            >
-              {/* Top Gloss Specular Highlight */}
-              <div className="absolute top-0 left-0 right-0 h-1/2 bg-gradient-to-b from-white/45 to-transparent pointer-events-none rounded-t-[20px]" />
-
-              <Zap size={26} className="fill-black stroke-[3] shrink-0 drop-shadow-[0_1px_1px_rgba(255,255,255,0.8)]" />
-              <span className="font-black text-xl tracking-wide whitespace-nowrap drop-shadow-[0_1px_1px_rgba(255,255,255,0.8)]">
-                {isSpinning ? 'GIRANDO A ROLETA...' : 'GIRAR MEU GIRO DIÁRIO! 🎁'}
-              </span>
-            </button>
+      {/* 5. ERROR NOTIFICATION & DISCREET FOOTER WINNERS CAROUSEL */}
+      <div className="w-full max-w-md px-3 pb-2 pt-0 relative z-20 space-y-1.5">
+        {errorMessage && (
+          <div className="p-2.5 rounded-xl bg-red-950/95 border border-red-500/60 text-red-200 text-xs font-bold text-center flex items-center justify-between gap-2 shadow-lg animate-in shake">
+            <span className="text-left">{errorMessage}</span>
+            {onOpenDeposit && (
+              <button
+                onClick={() => {
+                  setErrorMessage(null);
+                  onOpenDeposit();
+                }}
+                className="px-2.5 py-1 bg-amber-400 text-black text-[10.5px] font-black rounded-lg uppercase tracking-wider shrink-0 hover:bg-amber-300"
+              >
+                Depositar +
+              </button>
+            )}
           </div>
         )}
 
+        {/* DISCREET FOOTER WINNERS CAROUSEL (RODAPÉ DISCRETO SEM REPETIR NOMES E SEM AVATARES) */}
+        <div className="w-full bg-[#050e26]/90 border border-amber-500/25 rounded-full px-3.5 py-1.5 flex items-center justify-between gap-2 overflow-hidden shadow-inner">
+          <div className="flex items-center gap-1.5 min-w-0 flex-1 truncate">
+            <p className="text-[11px] sm:text-xs text-zinc-300 truncate">
+              <strong className="text-white font-semibold">{currentWinner.name}</strong> <span className="text-zinc-400">ganhou</span> <span className="text-emerald-400 font-bold font-mono">{currentWinner.prize}</span>
+            </p>
+          </div>
+          <span className="text-[9.5px] text-zinc-400 font-mono shrink-0 pl-1">
+            há {secondsAgo}s
+          </span>
+        </div>
       </div>
 
-      {/* RESULT MODAL */}
+      {/* 7. RESULT MODAL (TRY AGAIN OR WIN) */}
       {showResultModal && resultPrize && (
         <div className="fixed inset-0 z-60 bg-black/90 backdrop-blur-md flex items-center justify-center p-4 animate-in zoom-in-95 duration-200 select-none">
-          <div className="w-full max-w-xs bg-gradient-to-b from-[#2a1b08] via-[#120801] to-black border-2 border-amber-400 rounded-3xl p-6 text-center shadow-[0_0_90px_rgba(245,158,11,0.95)] relative space-y-4">
+          <div className="w-full max-w-xs bg-gradient-to-b from-[#0e1635] via-[#090e24] to-black border-2 border-amber-400 rounded-3xl p-5 text-center shadow-[0_0_80px_rgba(245,158,11,0.9)] relative space-y-3.5">
             
             {resultPrize.isWin ? (
               <>
-                <div className="w-16 h-16 bg-gradient-to-tr from-amber-500 to-yellow-300 text-black rounded-full flex items-center justify-center mx-auto shadow-[0_0_40px_rgba(245,158,11,0.9)] text-3xl animate-bounce">
+                <div className="w-14 h-14 bg-gradient-to-tr from-amber-500 to-yellow-300 text-black rounded-full flex items-center justify-center mx-auto shadow-[0_0_30px_rgba(245,158,11,0.9)] text-3xl animate-bounce">
                   🎉
                 </div>
 
@@ -335,71 +356,78 @@ export default function DailyPrizeWheel({ isOpen, onClose, balance, onUpdateBala
                   PARABÉNS! VOCÊ GANHOU!
                 </h3>
 
-                <div className="py-4 px-4 bg-black/85 rounded-2xl border-2 border-amber-400/60 text-center space-y-2">
+                <div className="py-3.5 px-4 bg-black/85 rounded-2xl border-2 border-amber-400/60 text-center space-y-1.5">
                   {resultPrize.image ? (
                     <img
                       src={resultPrize.image}
                       alt={resultPrize.label}
                       referrerPolicy="no-referrer"
-                      className="w-24 h-24 object-contain rounded-xl mx-auto drop-shadow-lg"
+                      className="w-20 h-20 object-contain rounded-xl mx-auto drop-shadow-lg"
                     />
                   ) : (
                     <div className="text-3xl">🎁</div>
                   )}
-                  <span className="text-[10px] text-zinc-400 font-bold uppercase block">Seu Prêmio da Roleta</span>
-                  <span className="text-2xl font-black text-emerald-400 font-mono block drop-shadow">
+                  <span className="text-[10px] text-zinc-400 font-bold uppercase block">Prêmio Conquistado</span>
+                  <span className="text-xl font-black text-emerald-400 font-mono block drop-shadow">
                     {resultPrize.label}
                   </span>
-                  {resultPrize.type === 'cash' && (
-                    <span className="text-[11px] text-emerald-300 font-bold block">
-                      ✅ Creditado instantaneamente no seu saldo Pix!
-                    </span>
-                  )}
                 </div>
 
-                <p className="text-[11px] text-zinc-400 font-medium">
-                  Seu 1 giro diário foi utilizado. Próximo giro liberado amanhã às 00:00!
-                </p>
+                <div className="space-y-2 pt-1">
+                  <button
+                    onClick={() => {
+                      setShowResultModal(false);
+                      handleSpinWheel();
+                    }}
+                    className="w-full py-3 bg-gradient-to-r from-amber-400 to-yellow-500 text-black font-black text-xs uppercase tracking-wider rounded-xl shadow-lg hover:brightness-110 active:scale-95 transition"
+                  >
+                    GIRAR NOVAMENTE (R$ 2,50) 🎰
+                  </button>
 
-                <div className="p-1 rounded-2xl bg-gradient-to-b from-[#593b04] to-[#120801] border border-[#ffd700]/50">
                   <button
                     onClick={() => {
                       setShowResultModal(false);
                       onClose();
                     }}
-                    className="w-full py-3.5 bg-gradient-to-b from-[#fff399] via-[#f7b700] to-[#a36200] border-2 border-[#fffde0] text-black font-black text-xs uppercase tracking-wider rounded-xl shadow-[0_6px_0_#4a2e00,0_12px_20px_rgba(245,158,11,0.6),inset_0_2px_4px_rgba(255,255,255,0.9)] hover:brightness-110 active:translate-y-1 active:shadow-[0_1px_0_#4a2e00] transition cursor-pointer"
+                    className="w-full py-2 bg-zinc-900 text-zinc-400 hover:text-white text-xs font-bold rounded-xl transition"
                   >
-                    VOLTAR AO CASSINO 🎰
+                    Voltar ao Cassino
                   </button>
                 </div>
               </>
             ) : (
               <>
-                <div className="w-16 h-16 bg-red-950/90 border-2 border-red-500/60 text-red-400 rounded-full flex items-center justify-center mx-auto shadow-[0_0_30px_rgba(239,68,68,0.5)] text-3xl">
-                  <Frown size={32} />
+                <div className="w-14 h-14 bg-red-950/90 border-2 border-red-500/60 text-red-400 rounded-full flex items-center justify-center mx-auto shadow-[0_0_30px_rgba(239,68,68,0.5)] text-2xl">
+                  <Frown size={28} />
                 </div>
 
-                <h3 className="text-lg font-black text-red-400 uppercase tracking-tight">
+                <h3 className="text-base font-black text-red-400 uppercase tracking-tight">
                   NÃO FOI DESSA VEZ!
                 </h3>
 
-                <p className="text-xs text-zinc-300 leading-relaxed font-semibold">
-                  Seu 1 giro diário foi utilizado hoje. Volte amanhã às 00:00 para girar a roleta novamente e concorrer a iPhones e Pix!
+                <p className="text-xs text-zinc-300 leading-relaxed font-medium">
+                  A roleta passou raspando no iPhone e no PIX de R$ 1.000! Gire novamente por apenas <strong className="text-amber-400">R$ 2,50</strong>.
                 </p>
 
-                <div className="p-2 bg-black/60 rounded-xl border border-amber-500/30 text-[11px] font-mono text-amber-300 font-bold">
-                  ⏳ Próximo giro em: {timeUntilMidnight}
-                </div>
+                <div className="space-y-2 pt-2">
+                  <button
+                    onClick={() => {
+                      setShowResultModal(false);
+                      handleSpinWheel();
+                    }}
+                    className="w-full py-3 bg-gradient-to-r from-amber-400 via-yellow-400 to-amber-500 text-black font-black text-xs uppercase tracking-wider rounded-xl shadow-[0_0_20px_rgba(245,158,11,0.5)] hover:brightness-110 active:scale-95 transition"
+                  >
+                    GIRAR NOVAMENTE (R$ 2,50) 🚀
+                  </button>
 
-                <div className="p-1 rounded-2xl bg-gradient-to-b from-[#5c3e03] to-[#120801] border border-[#ffd700]/60">
                   <button
                     onClick={() => {
                       setShowResultModal(false);
                       onClose();
                     }}
-                    className="w-full py-3.5 bg-gradient-to-b from-[#fff399] via-[#f7b700] to-[#a36200] border-2 border-[#fffde0] text-black font-black text-xs uppercase tracking-wider rounded-xl shadow-[0_6px_0_#4a2e00,0_12px_20px_rgba(245,158,11,0.7),inset_0_2px_4px_rgba(255,255,255,0.95)] hover:brightness-110 active:translate-y-1 active:shadow-[0_1px_0_#4a2e00] transition cursor-pointer"
+                    className="w-full py-2 bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white text-xs font-bold rounded-xl transition"
                   >
-                    VOLTAR AO CASSINO 🎰
+                    Voltar ao Cassino
                   </button>
                 </div>
               </>

@@ -44,9 +44,83 @@ export const pendingTransactions = new Map<string, {
   clientName?: string;
 }>();
 
-// Default configured SysPay credentials
-const DEFAULT_SYSPAY_RECEIVE_KEY = 'cd96e0ab-1a2f-4b28-8a45-caf37dd6069e';
-const DEFAULT_SYSPAY_API_URL = 'https://syspay.com';
+// Default configured receiver credentials (PicPay / User PIX Key)
+export const DEFAULT_PIX_KEY = '3c635ae7-06a3-402d-847b-d8d8f73baa78';
+export const DEFAULT_PIX_NAME = 'GABRIEL DA LUZ CARVALHO';
+export const DEFAULT_PIX_CITY = 'Sao Paulo';
+export const DEFAULT_PIX_DESC = 'FuturoBet';
+export const DEFAULT_SYSPAY_RECEIVE_KEY = '3c635ae7-06a3-402d-847b-d8d8f73baa78';
+export const DEFAULT_SYSPAY_API_URL = 'https://syspay.com';
+
+/**
+ * Standard CRC16-CCITT (0xFFFF, 0x1021) calculation for Banco Central do Brasil PIX standard
+ */
+export function calculateCRC16(payload: string): string {
+  let crc = 0xFFFF;
+  for (let i = 0; i < payload.length; i++) {
+    crc ^= payload.charCodeAt(i) << 8;
+    for (let j = 0; j < 8; j++) {
+      if ((crc & 0x8000) !== 0) {
+        crc = ((crc << 1) ^ 0x1021) & 0xFFFF;
+      } else {
+        crc = (crc << 1) & 0xFFFF;
+      }
+    }
+  }
+  return crc.toString(16).toUpperCase().padStart(4, '0');
+}
+
+/**
+ * Generates an official, 100% valid EMV BR Code PIX (Copia e Cola) with custom or open amount
+ */
+export function generatePixPayload(options?: {
+  key?: string;
+  name?: string;
+  city?: string;
+  amount?: number;
+  txId?: string;
+  description?: string;
+}): string {
+  const key = options?.key || process.env.PIX_KEY || DEFAULT_PIX_KEY;
+  const name = options?.name || process.env.PIX_RECEIVER_NAME || DEFAULT_PIX_NAME;
+  const city = options?.city || process.env.PIX_RECEIVER_CITY || DEFAULT_PIX_CITY;
+  const description = options?.description || DEFAULT_PIX_DESC;
+  const txId = options?.txId || 'Administrativo';
+  const amount = options?.amount;
+
+  const f = (id: string, val: string) => {
+    const len = val.length.toString().padStart(2, '0');
+    return `${id}${len}${val}`;
+  };
+
+  // Merchant Account Info (ID 26)
+  const gui = f('00', 'br.gov.bcb.pix');
+  const pixKey = f('01', key);
+  const desc = description ? f('02', description) : '';
+  const merchantAccountInfo = f('26', `${gui}${pixKey}${desc}`);
+
+  const mcc = f('52', '0000');
+  const currency = f('53', '986');
+  
+  let amountStr = '';
+  if (amount && amount > 0) {
+    const formattedAmount = amount.toFixed(2);
+    amountStr = f('54', formattedAmount);
+  }
+
+  const country = f('58', 'BR');
+  const merchantName = f('59', name.slice(0, 25));
+  const merchantCity = f('60', city.slice(0, 15));
+
+  // Additional data field (ID 62)
+  const reference = f('05', (txId || 'Administrativo').slice(0, 25));
+  const additionalData = f('62', reference);
+
+  const rawPayload = `000201${merchantAccountInfo}${mcc}${currency}${amountStr}${country}${merchantName}${merchantCity}${additionalData}6304`;
+  const checksum = calculateCRC16(rawPayload);
+
+  return `${rawPayload}${checksum}`;
+}
 
 /**
  * Creates a PIX deposit transaction via SysPay / SyncPay Gateway
@@ -120,11 +194,14 @@ export async function createSyncPayPixDeposit(req: SyncPayDepositRequest): Promi
     }
   }
 
-  // Generate structured, valid standard PIX Copia e Cola with SysPay integration identifier
-  const cleanAmountStr = req.amount.toFixed(2);
-  const formattedCents = cleanAmountStr.replace('.', '');
-  const pixCode = `00020126580014BR.GOV.BCB.PIX0136${receiveKey}520400005303986540${formattedCents}5802BR5916FUTUROBET_CASINO6009SAO_PAULO62070503${txId.slice(-8)}6304`;
-  const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(pixCode)}`;
+  // Generate structured, 100% valid EMV BR Code PIX (Copia e Cola & QR Code) pointing to the destination account
+  const pixCode = generatePixPayload({
+    amount: req.amount,
+    txId: 'Administrativo',
+    description: 'FuturoBet',
+  });
+  
+  const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&margin=10&data=${encodeURIComponent(pixCode)}`;
 
   pendingTransactions.set(txId, {
     amount: req.amount,
@@ -142,7 +219,7 @@ export async function createSyncPayPixDeposit(req: SyncPayDepositRequest): Promi
     expiresAt,
     isSimulated: false,
     status: 'PENDING',
-    gatewayMessage: `PIX SysPay configurado para chave: ${receiveKey.slice(0, 8)}...`,
+    gatewayMessage: `PIX gerado para GABRIEL DA LUZ CARVALHO (FuturoBet)`,
   };
 }
 
