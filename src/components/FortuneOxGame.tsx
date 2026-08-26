@@ -56,11 +56,10 @@ export default function FortuneOxGame({
          g.name.toLowerCase().includes(nameLower)
   );
 
-  const baseUrl = catalogGame?.demoUrl || 
-    'https://demogamesfree.pragmaticplay.net/gs2c/openGame.do?gameSymbol=vs20olympgate&lang=pt&cur=BRL';
+  const rawUrl = catalogGame?.demoUrl || 
+    'https://demogamesfree.pragmaticplay.net/gs2c/openGame.do?gameSymbol=vs20sweetbonanza&lang=pt&cur=BRL';
 
-  // Parâmetros limpos e diretos para carregamento veloz sem duplicação de queries
-  const gameUrl = baseUrl;
+  const gameUrl = rawUrl;
 
   const displayName = gameName || catalogGame?.name || 'FuturoBet Slot';
   const gameBg = catalogGame?.bgImage || catalogGame?.icon || '';
@@ -100,7 +99,7 @@ export default function FortuneOxGame({
     };
   }, []);
 
-  // 🎯 DESCONTA O VALOR DA APOSTA SELECIONADA DIRETAMENTE DO SALDO REAL
+  // 🎯 DESCONTA O VALOR DA APOSTA SELECIONADA DIRETAMENTE DO SALDO REAL (HOUSE EDGE RETAIN)
   const handleSpinDeduction = useCallback(() => {
     const currentBal = balanceRef.current;
     const betCost = currentBetRef.current;
@@ -120,7 +119,7 @@ export default function FortuneOxGame({
     lastSpinTimeRef.current = now;
     setIsSpinning(true);
 
-    // Desconta o valor da aposta em tempo real
+    // O saldo apenas reduz conforme os giros (retenção da casa / saldo diminui)
     const newBalAfterBet = parseFloat(Math.max(0, currentBal - betCost).toFixed(2));
     onUpdateBalance(newBalAfterBet);
     soundEngine.playSpinSound();
@@ -135,22 +134,7 @@ export default function FortuneOxGame({
     }, 50);
   }, [onUpdateBalance]);
 
-  // 💰 CREDITA GANHO REAL DIRETAMENTE NA CONTA (SEM NOTIFICAÇÕES FLOATING INTRUSIVAS)
-  const handleCreditWinAmount = useCallback((amount: number) => {
-    if (amount <= 0 || isNaN(amount)) return;
-    // Ignora saldos fictícios do demo (ex: 100.000,00)
-    if (amount > 3000) return;
-
-    const currentBal = balanceRef.current;
-    const cleanAmount = parseFloat(amount.toFixed(2));
-    const newBal = parseFloat((currentBal + cleanAmount).toFixed(2));
-    
-    onUpdateBalance(newBal);
-    soundEngine.playWinChime();
-    soundEngine.playCoinDrop();
-  }, [onUpdateBalance]);
-
-  // 🎯 CAPTURADOR DE CLIQUES E EVENTOS DE GIRO
+  // 🎯 CAPTURADOR DE CLIQUES E EVENTOS DE GIRO (SALDO SÓ DIMINUI A CADA GIRO)
   useEffect(() => {
     // Quando o usuário toca no iframe, o foco sai da janela pai e vai para o iframe
     const handleWindowBlur = () => {
@@ -175,7 +159,7 @@ export default function FortuneOxGame({
         const msg = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
         if (!msg) return;
 
-        // Detecta giro da bobina ou aposta
+        // Detecta giro da bobina ou aposta - desconta imediatamente
         if (
           msg.event === 'spin' || 
           msg.action === 'spin' || 
@@ -184,12 +168,6 @@ export default function FortuneOxGame({
           (msg.data && (msg.data.event === 'spin' || msg.data.action === 'spin'))
         ) {
           handleSpinDeduction();
-        }
-
-        // Detecta ganhos reais da rodada
-        const winValue = msg.winAmount || msg.win || msg.payout || (msg.data && msg.data.winAmount);
-        if (typeof winValue === 'number' && winValue > 0 && winValue < 3000) {
-          handleCreditWinAmount(winValue);
         }
       } catch (e) {
         // Ignora mensagens não serializadas
@@ -204,7 +182,7 @@ export default function FortuneOxGame({
       window.removeEventListener('blur', handleWindowBlur);
       window.removeEventListener('message', handleGameMessage);
     };
-  }, [handleSpinDeduction, handleCreditWinAmount]);
+  }, [handleSpinDeduction]);
 
   const handleReloadGame = () => {
     setIsLoading(true);
@@ -438,6 +416,7 @@ export default function FortuneOxGame({
             key={iframeKey}
             src={gameUrl}
             title={displayName}
+            referrerPolicy="no-referrer"
             onLoad={() => setIsLoading(false)}
             className="w-full border-0 select-none bg-black block"
             style={{
@@ -446,8 +425,7 @@ export default function FortuneOxGame({
               minHeight: '100%',
               touchAction: 'manipulation'
             }}
-            allow="autoplay"
-            sandbox="allow-forms allow-modals allow-orientation-lock allow-pointer-lock allow-popups allow-popups-to-escape-sandbox allow-same-origin allow-scripts"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
           />
         </div>
 

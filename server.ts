@@ -99,29 +99,50 @@ async function startServer() {
     return res.json({ success: true, status: 'PAID', message: 'Pagamento marcado como concluído no SyncPay!' });
   });
 
-  // 5. SyncPay Webhook Handler (Postback callback from SyncPay)
-  app.post('/api/syncpay/webhook', (req, res) => {
+  // 5. SyncPay & Astrofy Webhook Handlers (Postback callbacks)
+  const handlePaymentWebhook = (req: express.Request, res: express.Response) => {
     try {
-      const event = req.body;
-      console.log('SyncPay Webhook Received:', JSON.stringify(event));
+      const event = req.body || {};
+      console.log('SyncPay/Astrofy Webhook Received at', req.path, ':', JSON.stringify(event));
 
-      const txId = event.external_id || event.id || event.transaction_id;
-      const status = event.status || event.event;
+      const txId = event.external_id || event.id || event.transaction_id || event.data?.id || event.data?.external_id || event.reference_id || event.pix_id;
+      const rawStatus = (event.status || event.event || event.type || event.data?.status || '').toString().toUpperCase();
+
+      const isPaid = 
+        rawStatus === 'PAID' || 
+        rawStatus === 'COMPLETED' || 
+        rawStatus === 'APPROVED' || 
+        rawStatus === 'CONFIRMED' || 
+        rawStatus === 'SUBSCRIPTION-ACTIVATED' ||
+        rawStatus === 'SUBSCRIPTION-RENEWED' ||
+        rawStatus === 'PAYMENT_RECEIVED' ||
+        rawStatus.includes('PAID') ||
+        rawStatus.includes('APPROVED');
 
       if (txId && pendingTransactions.has(txId)) {
-        if (status === 'PAID' || status === 'COMPLETED' || status === 'APPROVED') {
+        if (isPaid) {
           const tx = pendingTransactions.get(txId)!;
           tx.status = 'PAID';
           pendingTransactions.set(txId, tx);
+          console.log(`[SyncPay/Astrofy] Transaction ${txId} marked as PAID via webhook.`);
         }
       }
 
-      return res.json({ received: true });
+      return res.json({ received: true, success: true, status: 'PROCESSED' });
     } catch (err: any) {
-      console.error('SyncPay Webhook Error:', err);
-      return res.status(400).json({ error: 'Webhook processing failed' });
+      console.error('Webhook Error:', err);
+      return res.status(400).json({ error: 'Webhook processing failed', details: err.message });
     }
-  });
+  };
+
+  // Support all common webhook routes (SyncPay, Astrofy, etc.)
+  app.post('/api/syncpay/webhook', handlePaymentWebhook);
+  app.post('/api/syncpay/webhook/subscription-activated', handlePaymentWebhook);
+  app.post('/api/syncpay/webhook/subscription-renewed', handlePaymentWebhook);
+  app.post('/webhook/syncpayment', handlePaymentWebhook);
+  app.post('/webhook/syncpayment/subscription-activated', handlePaymentWebhook);
+  app.post('/webhook/syncpayment/subscription-renewed', handlePaymentWebhook);
+
 
   // 6. Get SysPay / SyncPay Gateway Status
   app.get('/api/syncpay/config', (req, res) => {
