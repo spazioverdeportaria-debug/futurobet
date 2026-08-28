@@ -5,6 +5,7 @@ import { createServer as createViteServer } from 'vite';
 import {
   createSyncPayPixDeposit,
   requestSyncPayWithdrawal,
+  checkSyncPayTransactionStatus,
   pendingTransactions,
 } from './src/lib/syncpay';
 
@@ -71,12 +72,28 @@ async function startServer() {
   });
 
   // 3. SyncPay Check Transaction Status
-  app.get('/api/syncpay/check-pix/:id', (req, res) => {
+  app.get('/api/syncpay/check-pix/:id', async (req, res) => {
     const { id } = req.params;
     const tx = pendingTransactions.get(id);
 
+    // Query live status from SyncPayments API
+    const liveStatus = await checkSyncPayTransactionStatus(id);
+    if (liveStatus === 'PAID') {
+      if (tx) {
+        tx.status = 'PAID';
+        pendingTransactions.set(id, tx);
+      }
+      return res.json({
+        success: true,
+        transactionId: id,
+        status: 'PAID',
+        amount: tx?.amount,
+        createdAt: tx?.createdAt,
+      });
+    }
+
     if (!tx) {
-      return res.json({ success: true, transactionId: id, status: 'PENDING' });
+      return res.json({ success: true, transactionId: id, status: liveStatus });
     }
 
     return res.json({
@@ -144,22 +161,29 @@ async function startServer() {
   app.post('/webhook/syncpayment/subscription-renewed', handlePaymentWebhook);
 
 
-  // 6. Get SysPay / SyncPay Gateway Status
+  // 6. Get SyncPay Gateway Status
   app.get('/api/syncpay/config', (req, res) => {
-    const receiveKey = process.env.SYSPAY_RECEIVE_KEY || process.env.SYNCPAY_CLIENT_SECRET || 'cd96e0ab-1a2f-4b28-8a45-caf37dd6069e';
-    const clientKey = process.env.SYSPAY_CLIENT_KEY || process.env.SYNCPAY_CLIENT_ID || 'CHAVE_PUBLICA';
-    const apiUrl = process.env.SYSPAY_API_URL || process.env.SYNCPAY_API_URL || 'https://syspay.com';
+    const clientId = process.env.SYNCPAY_CLIENT_ID || process.env.SYSPAY_CLIENT_KEY || '296fd6ea-0a24-45a6-a882-fd2a75edbe55';
+    const clientSecret = process.env.SYNCPAY_CLIENT_SECRET || process.env.SYSPAY_RECEIVE_KEY || '79bf01e5-6a6d-481a-ad15-5e7b89170efb';
+    const apiUrl = process.env.SYNCPAY_API_URL || process.env.SYSPAY_API_URL || 'https://api.syncpay.com.br';
     const appUrl = process.env.APP_URL || 'http://localhost:3000';
 
     res.json({
       configured: true,
-      hasClientId: Boolean(clientKey),
-      hasClientSecret: Boolean(receiveKey),
-      receiveKeyMasked: receiveKey ? `${receiveKey.slice(0, 8)}...${receiveKey.slice(-6)}` : '',
+      hasClientId: Boolean(clientId),
+      hasClientSecret: Boolean(clientSecret),
+      clientIdMasked: clientId ? `${clientId.slice(0, 8)}...${clientId.slice(-6)}` : '',
+      clientSecretMasked: clientSecret ? `${clientSecret.slice(0, 8)}...${clientSecret.slice(-6)}` : '',
       apiUrl,
-      gateway: 'SysPay (https://syspay.com/)',
+      gateway: 'API da Sync (SyncPay)',
       webhookUrl: `${appUrl}/api/syncpay/webhook`,
-      environment: 'SysPay PIX Produção Ativo',
+      environment: 'SyncPay Produção Ativo',
+      activeProfiles: [
+        { client: 'futurobet (Vendas/Cobrança)', clientId: '296fd6ea-0a24-45a6-a882-fd2a75edbe55', active: true },
+        { client: 'futurobet (PIX)', clientId: '36adf56b-e3f6-4319-b10b-e1347e62eafd', active: true },
+        { client: 'futurobet (Webhook)', clientId: '3d0717fe-95a1-4b39-a5cc-9cbd8a9dd244', active: true },
+        { client: 'Future', clientId: 'ba94c956-585b-4873-92d2-5b669ab07e8e', active: true },
+      ]
     });
   });
 

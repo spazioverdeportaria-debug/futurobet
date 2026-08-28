@@ -1,12 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
-  X, QrCode, Copy, Check, ShieldCheck, Zap, RefreshCw, 
-  Clock, CheckCircle2, Sparkles, Lock, ArrowRight, 
-  Loader2, Hourglass, Shield, HelpCircle, User, Key
+  X, QrCode, Copy, Check, Zap, RefreshCw, 
+  Clock, CheckCircle2, Sparkles, ArrowRight, 
+  Loader2, ArrowLeft, ShieldCheck, CheckCircle
 } from 'lucide-react';
 import { soundEngine } from '../utils/audio';
-import { generatePixPayload, DEFAULT_PIX_KEY, DEFAULT_PIX_NAME } from '../lib/syncpay';
-import vegasBetLuxuryLogo from '../assets/images/vegasbet_luxury_logo_1786891904925.jpg';
 
 interface DepositModalProps {
   isOpen: boolean;
@@ -26,7 +24,7 @@ interface SyncPayPixData {
 }
 
 export default function DepositModal({ isOpen, onClose, onSuccessDeposit }: DepositModalProps) {
-  const [selectedAmount, setSelectedAmount] = useState<number>(50);
+  const [selectedAmount, setSelectedAmount] = useState<number>(20);
   const [customAmount, setCustomAmount] = useState<string>('');
   const [clientName, setClientName] = useState<string>('');
   const [clientCpf, setClientCpf] = useState<string>('');
@@ -38,85 +36,93 @@ export default function DepositModal({ isOpen, onClose, onSuccessDeposit }: Depo
   const [timeLeft, setTimeLeft] = useState<number>(900); // 15 minutes timer
   const [showOptionalFields, setShowOptionalFields] = useState<boolean>(false);
   
-  // Real Verification States
   const [isCheckingPayment, setIsCheckingPayment] = useState<boolean>(false);
   const [hasNotifiedPayment, setHasNotifiedPayment] = useState<boolean>(false);
   const [isPaymentConfirmed, setIsPaymentConfirmed] = useState<boolean>(false);
+  const checkIntervalRef = useRef<any>(null);
 
-  const pollingRef = useRef<NodeJS.Timeout | null>(null);
+  const presetAmounts = [20, 30, 50, 100, 200, 500];
 
-  useEffect(() => {
-    if (isOpen) {
-      setTimeLeft(900);
-      setHasNotifiedPayment(false);
-      setIsPaymentConfirmed(false);
-    }
-  }, [isOpen]);
+  const finalAmount = customAmount ? parseFloat(customAmount) || 0 : selectedAmount;
+  const bonusAmount = finalAmount; // 100% bonus
+  const totalCredited = finalAmount + bonusAmount;
+
+  // Format currency in BRL (pt-BR)
+  const formatBRL = (val: number) => {
+    return val.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  };
 
   // Countdown timer for PIX expiration
   useEffect(() => {
-    if (!showPixScreen || timeLeft <= 0) return;
-    const interval = setInterval(() => {
-      setTimeLeft((prev) => (prev > 0 ? prev - 1 : 0));
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [showPixScreen, timeLeft]);
+    let timer: NodeJS.Timeout;
+    if (showPixScreen && timeLeft > 0 && !isPaymentConfirmed) {
+      timer = setInterval(() => {
+        setTimeLeft((prev) => (prev > 0 ? prev - 1 : 0));
+      }, 1000);
+    }
+    return () => clearInterval(timer);
+  }, [showPixScreen, timeLeft, isPaymentConfirmed]);
 
-  // Background Polling for Real Payment Status
+  // Polling to verify transaction status automatically every 4s
   useEffect(() => {
     if (!showPixScreen || !pixData?.transactionId || isPaymentConfirmed) {
-      if (pollingRef.current) clearInterval(pollingRef.current);
+      if (checkIntervalRef.current) clearInterval(checkIntervalRef.current);
       return;
     }
 
-    const checkStatus = async () => {
+    checkIntervalRef.current = setInterval(async () => {
       try {
-        const res = await fetch(`/api/syncpay/check-pix/${pixData.transactionId}`);
-        const data = await res.json();
-
-        if (data.status === 'PAID') {
-          setIsPaymentConfirmed(true);
-          soundEngine.playCoinDrop();
-          onSuccessDeposit(pixData.amount);
-          if (pollingRef.current) clearInterval(pollingRef.current);
+        const res = await fetch(`/api/syncpay/check-pix/${encodeURIComponent(pixData.transactionId)}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data && data.status === 'PAID') {
+            setIsPaymentConfirmed(true);
+            soundEngine.playWinChime();
+            onSuccessDeposit(totalCredited);
+            clearInterval(checkIntervalRef.current);
+          }
         }
       } catch (err) {
-        // Continue quietly polling
+        // Silently continue polling
       }
-    };
-
-    pollingRef.current = setInterval(checkStatus, 5000);
+    }, 4000);
 
     return () => {
-      if (pollingRef.current) clearInterval(pollingRef.current);
+      if (checkIntervalRef.current) clearInterval(checkIntervalRef.current);
     };
-  }, [showPixScreen, pixData, isPaymentConfirmed, onSuccessDeposit]);
+  }, [showPixScreen, pixData?.transactionId, isPaymentConfirmed, totalCredited, onSuccessDeposit]);
 
   if (!isOpen) return null;
 
-  const quickAmounts = [
-    { value: 20, label: 'R$ 20', badge: null },
-    { value: 30, label: 'R$ 30', badge: null },
-    { value: 50, label: 'R$ 50', badge: 'MAIS POPULAR 🔥' },
-    { value: 100, label: 'R$ 100', badge: 'BÔNUS DUPLO 💎' },
-    { value: 200, label: 'R$ 200', badge: null },
-    { value: 500, label: 'R$ 500', badge: 'VIP EXPERT 👑' },
-  ];
+  const handleSelectAmount = (amount: number) => {
+    setSelectedAmount(amount);
+    setCustomAmount('');
+    setErrorMessage(null);
+    soundEngine.playCashierBeep();
+  };
 
-  const finalAmount = customAmount ? parseFloat(customAmount) || 0 : selectedAmount;
-  const bonusAmount = finalAmount;
-  const totalCredited = finalAmount + bonusAmount;
-
-  const formatTimer = (seconds: number) => {
-    const m = Math.floor(seconds / 60);
-    const s = seconds % 60;
-    return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+  const handleCustomAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value.replace(/[^0-9.]/g, '');
+    setCustomAmount(val);
+    setErrorMessage(null);
   };
 
   const handleGeneratePix = async () => {
-    if (finalAmount <= 0) return;
+    if (finalAmount < 20) {
+      setErrorMessage('O valor mínimo de depósito é R$ 20,00.');
+      soundEngine.playLockedSound();
+      return;
+    }
+
+    if (finalAmount > 10000) {
+      setErrorMessage('O valor máximo por transação é R$ 10.000,00.');
+      soundEngine.playLockedSound();
+      return;
+    }
+
     setIsProcessing(true);
     setErrorMessage(null);
+    soundEngine.playCashierBeep();
     setHasNotifiedPayment(false);
     setIsPaymentConfirmed(false);
 
@@ -127,7 +133,7 @@ export default function DepositModal({ isOpen, onClose, onSuccessDeposit }: Depo
         body: JSON.stringify({
           amount: finalAmount,
           clientName: clientName || 'Jogador FuturoBet',
-          clientCpf: clientCpf || '00000000000',
+          clientCpf: clientCpf || '12345678909',
         }),
       });
 
@@ -138,29 +144,12 @@ export default function DepositModal({ isOpen, onClose, onSuccessDeposit }: Depo
         setShowPixScreen(true);
         setTimeLeft(900);
       } else {
-        throw new Error(data?.error || 'Fallback direct Pix generation');
+        throw new Error(data?.error || 'Erro ao gerar PIX');
       }
     } catch (err: any) {
-      console.warn('Using instant direct PicPay / PIX generator:', err);
-      // Valid BR Code PIX (Copia e Cola & QR Code) pointing to GABRIEL DA LUZ CARVALHO
-      const pixCode = generatePixPayload({
-        amount: finalAmount,
-        txId: 'Administrativo',
-        description: 'FuturoBet',
-      });
-      
-      setPixData({
-        transactionId: `PIX_${Date.now()}`,
-        amount: finalAmount,
-        pixCode,
-        qrCodeUrl: `https://api.qrserver.com/v1/create-qr-code/?size=320x320&margin=8&data=${encodeURIComponent(pixCode)}`,
-        expiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
-        isSimulated: false,
-        status: 'PENDING',
-        gatewayMessage: 'PIX gerado para GABRIEL DA LUZ CARVALHO (FuturoBet)',
-      });
-      setShowPixScreen(true);
-      setTimeLeft(900);
+      console.warn('Erro ao gerar PIX:', err);
+      setErrorMessage(err.message || 'Não foi possível gerar a chave PIX no momento. Tente novamente.');
+      soundEngine.playLockedSound();
     } finally {
       setIsProcessing(false);
     }
@@ -171,7 +160,7 @@ export default function DepositModal({ isOpen, onClose, onSuccessDeposit }: Depo
     navigator.clipboard.writeText(pixData.pixCode);
     setCopied(true);
     soundEngine.playCoinDrop();
-    setTimeout(() => setCopied(false), 2500);
+    setTimeout(() => setCopied(false), 3000);
   };
 
   const handleVerifyPaymentStatus = async () => {
@@ -179,13 +168,13 @@ export default function DepositModal({ isOpen, onClose, onSuccessDeposit }: Depo
     setIsCheckingPayment(true);
 
     try {
-      const res = await fetch(`/api/syncpay/check-pix/${pixData.transactionId}`);
+      const res = await fetch(`/api/syncpay/check-pix/${encodeURIComponent(pixData.transactionId)}`);
       const data = await res.json();
 
-      if (data.status === 'PAID') {
+      if (data && data.status === 'PAID') {
         setIsPaymentConfirmed(true);
-        soundEngine.playCoinDrop();
-        onSuccessDeposit(pixData.amount);
+        soundEngine.playWinChime();
+        onSuccessDeposit(totalCredited);
       } else {
         setHasNotifiedPayment(true);
       }
@@ -196,164 +185,149 @@ export default function DepositModal({ isOpen, onClose, onSuccessDeposit }: Depo
     }
   };
 
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
+
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/85 backdrop-blur-md p-3 sm:p-4 animate-in fade-in duration-200">
-      <div className="w-full max-w-[440px] bg-gradient-to-b from-[#140e06] via-[#0d0905] to-[#070503] border border-[#d4af37]/40 rounded-[28px] p-5 sm:p-6 shadow-[0_20px_60px_rgba(0,0,0,0.9),0_0_40px_rgba(245,158,11,0.15)] text-white relative max-h-[92vh] overflow-y-auto no-scrollbar flex flex-col justify-between">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/85 backdrop-blur-md animate-in fade-in duration-200">
+      
+      {/* Premium Glass Container with precise constraints to prevent scrolling & broken wrapping */}
+      <div className="relative w-full max-w-[425px] bg-[#0c0d12] border border-amber-500/30 rounded-3xl p-5 sm:p-6 shadow-[0_25px_70px_rgba(0,0,0,0.95)] text-white overflow-hidden">
         
-        {/* Luxury Gold Halo Light on Top */}
-        <div className="absolute top-0 inset-x-0 h-32 bg-gradient-to-b from-amber-500/15 via-transparent to-transparent pointer-events-none rounded-t-[28px]" />
+        {/* Glow ambient effects */}
+        <div className="absolute -top-20 -left-20 w-44 h-44 bg-amber-500/10 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute -bottom-20 -right-20 w-44 h-44 bg-yellow-500/10 rounded-full blur-3xl pointer-events-none" />
 
-        {!showPixScreen ? (
-          /* ============================================================ */
-          /* STEP 1: VALUE SELECTION & BONUS PREVIEW                     */
-          /* ============================================================ */
-          <div className="space-y-4 relative z-10">
+        {/* TOP HEADER: Clean FuturoBet Brand & Title */}
+        <div className="flex items-center justify-between pb-3.5 border-b border-zinc-800/80 relative z-10">
+          <div className="flex items-center gap-2.5">
+            {/* FUTUROBET Master Logo */}
+            <div className="flex items-center bg-zinc-900/90 px-2.5 py-1 rounded-xl border border-zinc-800">
+              <span className="text-white font-black text-sm tracking-tight font-sans">FUTURO</span>
+              <span className="text-amber-400 font-black text-sm tracking-tight font-sans ml-0.5">BET</span>
+            </div>
             
-            {/* Header with Close */}
-            <div className="flex items-center justify-between pb-3.5 border-b border-zinc-800/80">
-              <div className="flex items-center gap-3">
-                <div className="flex items-center font-black text-lg tracking-tighter uppercase font-sans select-none">
-                  <span className="text-white">FUTURO</span>
-                  <span className="text-amber-400 ml-0.5">BET</span>
-                </div>
-                <div className="border-l border-zinc-800 pl-3">
-                  <h3 className="text-xs font-black tracking-wider uppercase text-white flex items-center gap-1.5">
-                    Depósito Instantâneo
-                    <span className="px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 text-[8px] font-black border border-emerald-500/40">
-                      PIX
-                    </span>
-                  </h3>
-                  <p className="text-[10px] text-zinc-400 font-medium">Bônus automático de 100% no seu saldo</p>
-                </div>
-              </div>
+            <div className="leading-tight">
+              <h3 className="text-sm sm:text-base font-black uppercase tracking-wide text-white">
+                {showPixScreen ? 'PAGAMENTO PIX' : 'DEPÓSITO PIX'}
+              </h3>
+              <p className="text-[11px] text-emerald-400 font-bold flex items-center gap-1 mt-0.5">
+                <Zap className="w-3 h-3 fill-emerald-400 text-emerald-400 shrink-0" />
+                <span>Bônus 100% no 1º Depósito</span>
+              </p>
+            </div>
+          </div>
 
-              <button
-                onClick={onClose}
-                className="w-8 h-8 rounded-full bg-zinc-900/90 hover:bg-zinc-800 border border-zinc-800 flex items-center justify-center text-zinc-400 hover:text-white transition cursor-pointer shrink-0"
-              >
-                <X className="w-4 h-4" />
-              </button>
+          <button
+            onClick={onClose}
+            className="w-8 h-8 rounded-full bg-zinc-800/80 hover:bg-zinc-700 text-zinc-400 hover:text-white flex items-center justify-center transition cursor-pointer shrink-0"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* ========================================================================= */}
+        {/* SCREEN 1: VALUE SELECTION */}
+        {/* ========================================================================= */}
+        {!showPixScreen ? (
+          <div className="space-y-4 pt-3.5 relative z-10">
+            
+            {/* Bonus Card */}
+            <div className="relative overflow-hidden bg-gradient-to-r from-amber-950/30 via-yellow-950/20 to-zinc-900/60 border border-amber-500/40 rounded-2xl p-3.5 text-center">
+              <div className="flex items-center justify-center gap-1.5 text-amber-400 mb-1">
+                <Sparkles className="w-3.5 h-3.5" />
+                <span className="text-xs font-black uppercase tracking-wider">DOBRE SEU SALDO AGORA</span>
+                <Sparkles className="w-3.5 h-3.5" />
+              </div>
+              <p className="text-xs text-zinc-300">
+                Deposite <strong className="text-white font-bold">R$ {formatBRL(finalAmount)}</strong> e receba{' '}
+                <strong className="text-emerald-400 font-black">R$ {formatBRL(totalCredited)}</strong> para jogar!
+              </p>
             </div>
 
-            {/* Quick Amounts Grid */}
-            <div>
-              <label className="text-[11px] font-extrabold text-amber-300/90 mb-2 block uppercase tracking-wider">
-                Escolha o valor
+            {/* Presets Grid */}
+            <div className="space-y-1.5">
+              <label className="text-[11px] font-black text-zinc-300 uppercase tracking-wider">
+                ESCOLHA O VALOR:
               </label>
               <div className="grid grid-cols-3 gap-2">
-                {quickAmounts.map((item) => {
-                  const isSelected = selectedAmount === item.value && !customAmount;
+                {presetAmounts.map((amount) => {
+                  const isSelected = selectedAmount === amount && !customAmount;
                   return (
                     <button
-                      key={item.value}
-                      onClick={() => {
-                        setSelectedAmount(item.value);
-                        setCustomAmount('');
-                      }}
-                      className={`relative py-3 px-2 rounded-2xl font-black text-sm transition-all border cursor-pointer flex flex-col items-center justify-center ${
+                      key={amount}
+                      onClick={() => handleSelectAmount(amount)}
+                      className={`relative py-2.5 px-1.5 rounded-xl text-center font-black transition-all cursor-pointer border ${
                         isSelected
-                          ? 'bg-gradient-to-b from-[#ffe899] via-[#f59e0b] to-[#b45309] text-black border-[#fff4c2] shadow-[0_0_18px_rgba(245,158,11,0.5)] scale-[1.02]'
-                          : 'bg-zinc-900/80 text-zinc-200 border-zinc-800/80 hover:border-amber-500/40 hover:bg-zinc-850'
+                          ? 'bg-gradient-to-b from-amber-400 to-yellow-500 text-black border-amber-300 shadow-[0_0_15px_rgba(245,158,11,0.4)] scale-[1.02]'
+                          : 'bg-[#12141c] text-zinc-300 border-zinc-800/90 hover:border-amber-500/40 hover:bg-zinc-800/80'
                       }`}
                     >
-                      {item.badge && (
-                        <span className={`absolute -top-2 text-[7.5px] font-black uppercase px-1.5 py-0.2 rounded-full border shadow ${
-                          isSelected 
-                            ? 'bg-black text-amber-300 border-amber-400' 
-                            : 'bg-amber-500 text-black border-amber-300'
-                        }`}>
-                          {item.badge}
-                        </span>
-                      )}
-                      <span>{item.label}</span>
+                      <span className="text-xs font-black block">R$ {amount}</span>
+                      <span className={`text-[9.5px] font-extrabold block mt-0.5 ${isSelected ? 'text-black/85' : 'text-emerald-400'}`}>
+                        +{amount} bônus
+                      </span>
                     </button>
                   );
                 })}
               </div>
             </div>
 
-            {/* Custom Amount Input */}
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <label className="text-[11px] font-extrabold text-zinc-400 uppercase tracking-wider">
-                  Ou digite outro valor
-                </label>
-                <span className="text-[10px] text-zinc-500 font-medium">Mínimo R$ 10,00</span>
-              </div>
-              <div className="relative">
-                <span className="absolute left-3.5 top-1/2 -translate-y-1/2 font-black text-amber-400 text-sm">R$</span>
+            {/* Custom Amount */}
+            <div className="space-y-1.5">
+              <label className="text-[11px] font-black text-zinc-300 uppercase tracking-wider">
+                OU DIGITE OUTRO VALOR:
+              </label>
+              <div className="relative flex items-center bg-[#101218] border border-zinc-800 rounded-xl py-2.5 px-3.5 focus-within:border-amber-400 transition">
+                <span className="text-zinc-400 font-extrabold text-sm mr-2">
+                  R$
+                </span>
                 <input
-                  type="number"
-                  placeholder="Ex: 75,00"
+                  type="text"
+                  inputMode="decimal"
+                  placeholder="0,00 (Mínimo R$ 20)"
                   value={customAmount}
-                  onChange={(e) => setCustomAmount(e.target.value)}
-                  className="w-full bg-zinc-950/90 border border-zinc-800 rounded-2xl py-2.5 pl-11 pr-4 text-white placeholder-zinc-600 font-black text-sm focus:outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400 transition"
+                  onChange={handleCustomAmountChange}
+                  className="w-full bg-transparent text-sm font-bold text-white placeholder-zinc-600 focus:outline-none"
                 />
               </div>
             </div>
 
-            {/* VIP 100% Double Bonus Card */}
-            <div className="p-3 rounded-2xl bg-gradient-to-r from-amber-950/30 via-zinc-900 to-amber-950/30 border border-amber-500/30 relative overflow-hidden shadow">
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-xl bg-amber-400/20 border border-amber-400/30 flex items-center justify-center text-amber-300 shrink-0">
-                    <Sparkles className="w-4 h-4 text-amber-400 fill-amber-400" />
-                  </div>
-                  <div>
-                    <span className="text-[9.5px] font-black uppercase tracking-wider text-amber-300 block">
-                      BÔNUS VIP BOAS-VINDAS (+100%)
-                    </span>
-                    <span className="text-[11px] font-medium text-zinc-300">
-                      Você deposita <strong className="text-white">R$ {finalAmount.toFixed(2)}</strong> e recebe:
-                    </span>
-                  </div>
-                </div>
-                <div className="text-right shrink-0">
-                  <span className="text-sm font-black text-emerald-400 font-mono block">
-                    R$ {totalCredited.toFixed(2)}
-                  </span>
-                  <span className="text-[8px] text-emerald-300/80 font-bold uppercase block">NA SUA BANCA</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Optional CPF / Name toggle */}
-            <div>
+            {/* Optional payer info */}
+            <div className="pt-0.5">
               <button
+                type="button"
                 onClick={() => setShowOptionalFields(!showOptionalFields)}
-                className="text-[10.5px] font-bold text-amber-400/80 hover:text-amber-300 flex items-center gap-1 cursor-pointer transition"
+                className="text-[11px] text-zinc-500 hover:text-zinc-300 transition flex items-center gap-1 cursor-pointer"
               >
-                <span>{showOptionalFields ? '− Ocultar dados adicionais' : '+ Adicionar Nome e CPF (Opcional)'}</span>
+                <span>{showOptionalFields ? '− Ocultar dados opcionais' : '+ Adicionar Nome e CPF (Opcional)'}</span>
               </button>
 
               {showOptionalFields && (
-                <div className="mt-2 grid grid-cols-2 gap-2 animate-in fade-in duration-150">
-                  <div>
-                    <label className="text-[9.5px] font-bold text-zinc-400 block mb-1">Nome do Titular</label>
-                    <input
-                      type="text"
-                      placeholder="Seu nome"
-                      value={clientName}
-                      onChange={(e) => setClientName(e.target.value)}
-                      className="w-full bg-zinc-950 border border-zinc-800 rounded-xl py-2 px-3 text-white text-xs focus:outline-none focus:border-amber-400 font-medium"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[9.5px] font-bold text-zinc-400 block mb-1">CPF</label>
-                    <input
-                      type="text"
-                      placeholder="000.000.000-00"
-                      value={clientCpf}
-                      onChange={(e) => setClientCpf(e.target.value)}
-                      className="w-full bg-zinc-950 border border-zinc-800 rounded-xl py-2 px-3 text-white text-xs focus:outline-none focus:border-amber-400 font-mono"
-                    />
-                  </div>
+                <div className="space-y-2 mt-2 pt-2 border-t border-zinc-800/60 animate-in fade-in duration-150">
+                  <input
+                    type="text"
+                    placeholder="Nome Completo (Opcional)"
+                    value={clientName}
+                    onChange={(e) => setClientName(e.target.value)}
+                    className="w-full bg-zinc-950 border border-zinc-800 rounded-xl py-2 px-3 text-xs text-white placeholder-zinc-600 focus:outline-none focus:border-amber-400"
+                  />
+                  <input
+                    type="text"
+                    placeholder="CPF (Opcional)"
+                    value={clientCpf}
+                    onChange={(e) => setClientCpf(e.target.value)}
+                    className="w-full bg-zinc-950 border border-zinc-800 rounded-xl py-2 px-3 text-xs text-white placeholder-zinc-600 focus:outline-none focus:border-amber-400"
+                  />
                 </div>
               )}
             </div>
 
             {errorMessage && (
-              <div className="p-2.5 bg-red-950/50 border border-red-500/50 rounded-xl text-red-300 text-xs font-bold text-center">
+              <div className="p-2.5 bg-red-950/40 border border-red-500/50 rounded-xl text-red-400 text-xs font-bold text-center">
                 {errorMessage}
               </div>
             )}
@@ -361,173 +335,128 @@ export default function DepositModal({ isOpen, onClose, onSuccessDeposit }: Depo
             {/* Generate PIX Button */}
             <button
               onClick={handleGeneratePix}
-              disabled={isProcessing || finalAmount <= 0}
-              className="w-full py-3.5 bg-gradient-to-r from-[#ffe485] via-[#f7b700] to-[#b45309] text-black font-black text-xs sm:text-sm uppercase tracking-wider rounded-2xl shadow-[0_0_20px_rgba(245,158,11,0.5)] hover:brightness-110 active:scale-[0.98] transition-all disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer border-t border-white/60"
+              disabled={isProcessing}
+              className="w-full py-3.5 bg-gradient-to-r from-amber-400 via-yellow-400 to-amber-500 text-black font-black text-xs uppercase tracking-wider rounded-xl shadow-[0_0_20px_rgba(245,158,11,0.4)] hover:brightness-110 active:scale-[0.98] transition-all cursor-pointer flex items-center justify-center gap-2 disabled:opacity-60"
             >
               {isProcessing ? (
                 <>
-                  <RefreshCw className="w-4 h-4 animate-spin" />
-                  <span>GERANDO PIX SEGURO...</span>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>GERANDO PIX...</span>
                 </>
               ) : (
                 <>
-                  <Zap className="w-4 h-4 fill-black" />
-                  <span>GERAR PIX DE R$ {finalAmount.toFixed(2)}</span>
-                  <ArrowRight className="w-4 h-4 ml-1" />
+                  <span>GERAR PIX DE R$ {formatBRL(finalAmount)}</span>
+                  <ArrowRight className="w-4 h-4 stroke-[2.5]" />
                 </>
               )}
             </button>
-
-            {/* Security Guarantee Footer */}
-            <div className="flex items-center justify-center gap-2 text-[9.5px] text-zinc-400 pt-0.5">
-              <ShieldCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-              <span>Transação protegida por criptografia SSL 256-bit • SysPay</span>
-            </div>
-
           </div>
         ) : (
-          /* ============================================================ */
-          /* STEP 2: PROFESSIONAL HIGH-CONVERTING PIX PAYMENT SCREEN     */
-          /* ============================================================ */
-          <div className="space-y-3.5 relative z-10 animate-in fade-in duration-200">
+          /* ========================================================================= */
+          /* SCREEN 2: HIGH-QUALITY CLEAN PIX SCREEN WITHOUT BROKEN WRAPPING */
+          /* ========================================================================= */
+          <div className="space-y-3.5 pt-3 relative z-10">
             
-            {/* Top Navigation & Status Bar */}
-            <div className="flex items-center justify-between pb-2.5 border-b border-zinc-800/80">
-              
-              {/* Status Indicator */}
+            {/* Status & Timer Bar */}
+            <div className="flex items-center justify-between bg-zinc-900/90 border border-zinc-800/90 rounded-xl px-3 py-2">
               <div className="flex items-center gap-2">
-                {isPaymentConfirmed ? (
-                  <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 text-[10px] font-black uppercase tracking-wider">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                    PAGAMENTO CONFIRMADO
-                  </div>
-                ) : hasNotifiedPayment ? (
-                  <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-400 text-[10px] font-black uppercase tracking-wider">
-                    <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping" />
-                    PAGAMENTO PENDENTE
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-zinc-900 border border-zinc-800 text-zinc-300 text-[10px] font-black uppercase tracking-wider">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
-                    AGUARDANDO PIX
-                  </div>
-                )}
+                <span className="relative flex h-2.5 w-2.5">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-400"></span>
+                </span>
+                <span className="text-xs font-black uppercase tracking-wide text-zinc-200">
+                  Aguardando Pagamento
+                </span>
               </div>
 
-              {/* Right Controls: Timer + Close Button */}
-              <div className="flex items-center gap-2">
-                <div className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-zinc-900/90 border border-zinc-800 text-[11px] font-mono font-bold text-amber-400 shadow-inner">
-                  <Clock className="w-3 h-3 text-amber-400" />
-                  <span>{formatTimer(timeLeft)}</span>
-                </div>
-
-                <button
-                  onClick={onClose}
-                  className="w-7 h-7 rounded-full bg-zinc-900/90 hover:bg-zinc-800 border border-zinc-800 flex items-center justify-center text-zinc-400 hover:text-white transition cursor-pointer"
-                  title="Fechar"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
+              <div className="flex items-center gap-1.5 text-zinc-400 font-mono text-xs bg-zinc-950 px-2 py-0.5 rounded-lg border border-zinc-800/80">
+                <Clock className="w-3.5 h-3.5 text-amber-400" />
+                <span className="text-amber-300 font-bold">{formatTime(timeLeft)}</span>
               </div>
-
             </div>
 
-            {/* Financial Breakdown Card */}
-            <div className="bg-gradient-to-r from-zinc-900 via-zinc-950 to-zinc-900 rounded-2xl border border-zinc-800/90 p-3 shadow-inner">
+            {/* Clean Financial Breakdown Card */}
+            <div className="bg-[#12141d] rounded-2xl border border-amber-500/30 p-3.5 shadow-md">
               <div className="flex items-center justify-between">
                 <div>
-                  <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">
-                    VALOR DO DEPÓSITO
+                  <span className="text-[10px] font-extrabold text-zinc-400 uppercase tracking-wider block">
+                    VALOR A PAGAR
                   </span>
-                  <div className="flex items-baseline gap-1.5 mt-0.5">
-                    <span className="text-sm font-black text-white font-mono">
-                      R$ {finalAmount.toFixed(2)}
+                  <div className="flex items-center gap-1.5 mt-0.5">
+                    <span className="text-base font-black text-white font-mono">
+                      R$ {formatBRL(finalAmount)}
                     </span>
-                    <span className="text-[10px] font-bold text-amber-400 font-mono">
-                      (+ R$ {bonusAmount.toFixed(2)} bônus)
+                    <span className="text-[10.5px] font-bold text-amber-400 bg-amber-950/60 px-1.5 py-0.5 rounded border border-amber-500/30 whitespace-nowrap">
+                      +100% Bônus
                     </span>
                   </div>
                 </div>
 
-                <div className="text-right pl-3 border-l border-zinc-800">
-                  <span className="text-[9px] font-black text-emerald-400 uppercase tracking-widest block">
+                <div className="text-right pl-3 border-l border-zinc-800/80">
+                  <span className="text-[10px] font-black text-emerald-400 uppercase tracking-wider block">
                     TOTAL CREDITADO
                   </span>
-                  <span className="text-base font-black text-emerald-400 font-mono block">
-                    R$ {totalCredited.toFixed(2)}
+                  <span className="text-base sm:text-lg font-black text-emerald-400 font-mono block mt-0.5">
+                    R$ {formatBRL(totalCredited)}
                   </span>
                 </div>
               </div>
             </div>
 
-            {/* If Confirmed Screen */}
+            {/* Approved View */}
             {isPaymentConfirmed ? (
-              <div className="py-5 px-4 bg-emerald-950/30 border border-emerald-500/50 rounded-2xl text-center space-y-3 animate-in zoom-in-95 duration-200">
-                <div className="w-12 h-12 bg-emerald-500/20 border border-emerald-400 rounded-full mx-auto flex items-center justify-center text-emerald-400 shadow-[0_0_20px_rgba(16,185,129,0.5)]">
-                  <CheckCircle2 className="w-7 h-7 stroke-[2.5]" />
+              <div className="py-6 px-4 bg-emerald-950/40 border border-emerald-500/60 rounded-2xl text-center space-y-3 animate-in zoom-in-95 duration-200">
+                <div className="w-14 h-14 bg-emerald-500/20 border border-emerald-400 rounded-full mx-auto flex items-center justify-center text-emerald-400 shadow-[0_0_25px_rgba(16,185,129,0.6)]">
+                  <CheckCircle2 className="w-8 h-8 stroke-[2.5]" />
                 </div>
                 <div>
-                  <h4 className="text-base font-black text-white uppercase tracking-wide">DEPÓSITO APROVADO!</h4>
-                  <p className="text-xs text-emerald-300 font-medium mt-0.5">
-                    Seu saldo de <strong>R$ {totalCredited.toFixed(2)}</strong> já está disponível na sua conta!
+                  <h4 className="text-lg font-black text-white uppercase tracking-wide">DEPÓSITO APROVADO!</h4>
+                  <p className="text-xs text-emerald-300 font-medium mt-1">
+                    Seu saldo de <strong>R$ {formatBRL(totalCredited)}</strong> já foi creditado com sucesso!
                   </p>
                 </div>
                 <button
                   onClick={onClose}
-                  className="w-full py-3 bg-emerald-500 text-black font-black text-xs uppercase tracking-wider rounded-xl hover:bg-emerald-400 transition cursor-pointer shadow-lg"
+                  className="w-full py-3.5 bg-emerald-500 text-black font-black text-xs uppercase tracking-wider rounded-xl hover:bg-emerald-400 transition cursor-pointer shadow-lg"
                 >
                   JOGAR AGORA
                 </button>
               </div>
             ) : (
               <>
-                {/* Clean QR Code Container */}
-                <div className="flex flex-col items-center justify-center">
-                  <div className="w-44 h-44 sm:w-48 sm:h-48 bg-white p-2.5 rounded-2xl shadow-[0_8px_30px_rgba(0,0,0,0.8)] border border-amber-400/30 relative flex items-center justify-center">
+                {/* Modern Crisp QR Code Frame */}
+                <div className="flex flex-col items-center justify-center pt-0.5">
+                  <div className="w-44 h-44 sm:w-48 sm:h-48 bg-white p-2.5 rounded-2xl shadow-[0_8px_30px_rgba(0,0,0,0.8)] border border-amber-400/80 relative flex items-center justify-center">
                     {pixData?.qrCodeUrl ? (
                       <img
                         src={pixData.qrCodeUrl}
-                        alt="QR Code PIX FuturoBet"
+                        alt="QR Code PIX"
                         className="w-full h-full object-contain rounded-lg select-none pointer-events-none"
                       />
                     ) : (
-                      <div className="w-full h-full border-2 border-dashed border-zinc-400 rounded-lg flex flex-col items-center justify-center text-zinc-800">
+                      <div className="w-full h-full border border-dashed border-zinc-300 rounded-lg flex flex-col items-center justify-center text-zinc-800">
                         <QrCode className="w-14 h-14 text-zinc-700 mb-1" />
-                        <span className="text-[10px] font-black uppercase">PIX FUTUROBET</span>
+                        <span className="text-xs font-black uppercase">PIX</span>
                       </div>
                     )}
                   </div>
-                  <span className="text-[10px] font-semibold text-zinc-400 mt-2">
-                    Abra o app do seu banco e escaneie o QR Code acima
+                  <span className="text-[11.5px] font-medium text-zinc-400 mt-2 text-center">
+                    Abra o app do seu banco e aponte a câmera para o QR Code
                   </span>
                 </div>
 
-                {/* Beneficiary Details Badge */}
-                <div className="p-2.5 rounded-xl bg-zinc-950/80 border border-zinc-800 text-[10.5px] space-y-1">
-                  <div className="flex items-center justify-between text-zinc-400">
-                    <span className="flex items-center gap-1 text-zinc-400 font-bold">
-                      <User className="w-3 h-3 text-amber-400" />
-                      Destinatário:
-                    </span>
-                    <strong className="text-white font-extrabold">{DEFAULT_PIX_NAME}</strong>
-                  </div>
-                  <div className="flex items-center justify-between text-zinc-400">
-                    <span className="flex items-center gap-1 text-zinc-400 font-bold">
-                      <Key className="w-3 h-3 text-emerald-400" />
-                      Identificação:
-                    </span>
-                    <span className="text-emerald-400 font-mono font-bold">FuturoBet / Administrativo</span>
-                  </div>
-                </div>
-
-                {/* PIX Copia e Cola Section */}
-                <div className="space-y-1">
-                  <div className="flex justify-between items-center text-[9.5px] font-extrabold uppercase tracking-wider text-zinc-400 px-0.5">
-                    <span>CÓDIGO PIX COPIA E COLA</span>
-                    {copied && <span className="text-emerald-400 font-black animate-pulse">✓ Código Copiado!</span>}
+                {/* PIX Copia e Cola with Clean UI */}
+                <div className="space-y-1.5 pt-0.5">
+                  <div className="flex justify-between items-center text-[10.5px] font-bold uppercase tracking-wider text-zinc-400 px-0.5">
+                    <span>PIX COPIA E COLA</span>
+                    {copied && (
+                      <span className="text-emerald-400 font-black flex items-center gap-1 animate-pulse">
+                        <Check className="w-3 h-3 stroke-[3]" /> Copiado com sucesso!
+                      </span>
+                    )}
                   </div>
 
-                  <div className="flex items-center gap-1.5 bg-zinc-950 border border-zinc-800 rounded-xl p-1 pr-1.5 focus-within:border-amber-400/70 transition">
+                  <div className="flex items-center gap-1.5 bg-[#101218] border border-zinc-800 rounded-xl p-1 pr-1 focus-within:border-amber-400/80 transition">
                     <input
                       type="text"
                       readOnly
@@ -538,8 +467,8 @@ export default function DepositModal({ isOpen, onClose, onSuccessDeposit }: Depo
                       onClick={handleCopyCode}
                       className={`px-3.5 py-2 rounded-lg font-black text-xs uppercase tracking-wider transition-all flex items-center gap-1.5 shrink-0 cursor-pointer shadow ${
                         copied
-                          ? 'bg-emerald-500 text-black shadow-emerald-500/30'
-                          : 'bg-gradient-to-r from-amber-400 to-yellow-400 text-black hover:brightness-110 active:scale-95 shadow-amber-500/20'
+                          ? 'bg-emerald-500 text-black shadow-emerald-500/40'
+                          : 'bg-gradient-to-r from-amber-400 to-yellow-400 text-black hover:brightness-110 active:scale-95 shadow-amber-500/25'
                       }`}
                     >
                       {copied ? (
@@ -557,32 +486,32 @@ export default function DepositModal({ isOpen, onClose, onSuccessDeposit }: Depo
                   </div>
                 </div>
 
-                {/* Pending State Banner */}
+                {/* Verification Notice */}
                 {hasNotifiedPayment && (
-                  <div className="p-3 bg-amber-950/30 border border-amber-500/40 rounded-xl space-y-1 animate-in fade-in duration-150">
+                  <div className="p-2.5 bg-amber-950/40 border border-amber-500/40 rounded-xl space-y-0.5 animate-in fade-in duration-150">
                     <div className="flex items-center gap-1.5 text-amber-400">
-                      <Hourglass className="w-3.5 h-3.5 animate-spin shrink-0" />
-                      <span className="text-[10.5px] font-black uppercase tracking-wide">
-                        COMPENSAÇÃO EM ANDAMENTO NO BANCO
+                      <Loader2 className="w-3 h-3 animate-spin shrink-0" />
+                      <span className="text-[10px] font-black uppercase tracking-wide">
+                        COMPENSAÇÃO EM ANDAMENTO
                       </span>
                     </div>
-                    <p className="text-[10.5px] text-zinc-300 leading-relaxed">
-                      Seu pagamento está sendo processado pelo sistema bancário. O saldo será creditado automaticamente na sua conta assim que for compensado.
+                    <p className="text-[10.5px] text-zinc-300 leading-snug">
+                      Pagamento em processamento no Banco Central. Seu saldo será liberado automaticamente.
                     </p>
                   </div>
                 )}
 
-                {/* Action Buttons */}
-                <div className="space-y-1.5 pt-0.5">
+                {/* Main Action Buttons */}
+                <div className="space-y-2 pt-1">
                   <button
                     onClick={handleVerifyPaymentStatus}
                     disabled={isCheckingPayment}
-                    className="w-full py-3.5 bg-gradient-to-r from-amber-400 via-yellow-400 to-amber-500 text-black font-black text-xs uppercase tracking-wider rounded-xl shadow-[0_0_20px_rgba(245,158,11,0.35)] hover:brightness-110 active:scale-[0.98] transition-all cursor-pointer flex items-center justify-center gap-2 border-t border-white/60 disabled:opacity-60"
+                    className="w-full py-3 bg-gradient-to-r from-amber-400 via-yellow-400 to-amber-500 text-black font-black text-xs uppercase tracking-wider rounded-xl shadow-[0_0_20px_rgba(245,158,11,0.35)] hover:brightness-110 active:scale-[0.98] transition-all cursor-pointer flex items-center justify-center gap-2 disabled:opacity-60"
                   >
                     {isCheckingPayment ? (
                       <>
                         <Loader2 className="w-4 h-4 animate-spin" />
-                        <span>CONSULTANDO BANCO CENTRAL...</span>
+                        <span>VERIFICANDO NO BANCO...</span>
                       </>
                     ) : (
                       <>
@@ -594,28 +523,14 @@ export default function DepositModal({ isOpen, onClose, onSuccessDeposit }: Depo
 
                   <button
                     onClick={() => setShowPixScreen(false)}
-                    className="w-full py-1 text-[11px] text-zinc-400 hover:text-white font-semibold transition cursor-pointer text-center block"
+                    className="w-full py-1 text-xs text-zinc-400 hover:text-white font-medium transition cursor-pointer text-center flex items-center justify-center gap-1"
                   >
-                    ← Voltar e alterar valor
+                    <ArrowLeft className="w-3.5 h-3.5" />
+                    <span>Voltar e alterar valor</span>
                   </button>
                 </div>
               </>
             )}
-
-            {/* Official SysPay & Central Bank Badge */}
-            <div className="flex items-center justify-center gap-2.5 pt-1 border-t border-zinc-800/60 text-[9.5px] text-zinc-500 font-medium">
-              <span className="flex items-center gap-1">
-                <ShieldCheck className="w-3 h-3 text-emerald-400" />
-                SysPay Gateway
-              </span>
-              <span>•</span>
-              <span>Banco Central</span>
-              <span>•</span>
-              <span className="flex items-center gap-1">
-                <Lock className="w-2.5 h-2.5 text-amber-400" />
-                SSL 256-bit
-              </span>
-            </div>
 
           </div>
         )}
