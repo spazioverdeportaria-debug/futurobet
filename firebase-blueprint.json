@@ -49,12 +49,43 @@
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["id", "userId", "type", "amount", "status"]
+    },
+    "DepositRequest": {
+      "title": "DepositRequest",
+      "description": "Moderated PIX deposit request with manual admin confirmation.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "transactionId": { "type": "string", "maxLength": 128 },
+        "cpf": { "type": "string", "maxLength": 32 },
+        "clientName": { "type": "string", "maxLength": 128 },
+        "amount": { "type": "number" },
+        "bonusAmount": { "type": "number" },
+        "totalAmount": { "type": "number" },
+        "status": { "type": "string", "enum": ["WAITING_PAYMENT", "PAID_PENDING_APPROVAL", "APPROVED", "REJECTED"] },
+        "gatewayStatus": { "type": "string", "maxLength": 64 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" },
+        "approvedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "amount", "status"]
+    },
+    "SystemSetting": {
+      "title": "SystemSetting",
+      "description": "Global casino settings including maintenance mode and alerts.",
+      "type": "object",
+      "properties": {
+        "maintenanceMode": { "type": "boolean" },
+        "maintenanceMessage": { "type": "string", "maxLength": 512 },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["maintenanceMode"]
     }
   },
   "firestore": {
     "/users/{userId}": {
       "schema": { "$ref": "#/entities/User" },
-      "description": "User profile document identified by Firebase Auth UID."
+      "description": "User profile document identified by CPF."
     },
     "/users/{userId}/bets/{betId}": {
       "schema": { "$ref": "#/entities/Bet" },
@@ -63,6 +94,14 @@
     "/users/{userId}/transactions/{txId}": {
       "schema": { "$ref": "#/entities/Transaction" },
       "description": "Subcollection of user transaction history."
+    },
+    "/deposits/{depositId}": {
+      "schema": { "$ref": "#/entities/DepositRequest" },
+      "description": "Moderated deposits queue for admin approval."
+    },
+    "/system_settings/{settingId}": {
+      "schema": { "$ref": "#/entities/SystemSetting" },
+      "description": "Global system configuration document."
     }
   }
 }

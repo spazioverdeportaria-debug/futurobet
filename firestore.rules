@@ -34,10 +34,8 @@ service cloud.firestore {
 
     // User profile documents indexed by CPF
     match /users/{userId} {
-      allow get: if isValidId(userId);
-      allow list: if false;
-      allow create: if isValidId(userId) && isValidUser(incoming());
-      allow update: if isValidId(userId) && isValidUser(incoming());
+      allow get, list: if isValidId(userId);
+      allow create, update: if isValidId(userId) && isValidUser(incoming());
       allow delete: if false;
 
       // User bets subcollection
@@ -49,6 +47,16 @@ service cloud.firestore {
       match /transactions/{txId} {
         allow read, write: if isValidId(userId) && isValidId(txId);
       }
+    }
+
+    // Global Deposits Queue for Admin approval and User Realtime Tracking
+    match /deposits/{depositId} {
+      allow read, write: if isValidId(depositId);
+    }
+
+    // Global System Settings (e.g. Maintenance Mode)
+    match /system_settings/{settingId} {
+      allow read, write: if isValidId(settingId);
     }
   }
 }

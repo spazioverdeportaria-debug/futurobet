@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { useAuth } from '../context/AuthContext';
 import { 
   MessageCircle, 
   Send, 
@@ -42,6 +43,7 @@ function cleanText(text: string): string {
 }
 
 export default function SupportScreen({ onOpenDeposit }: SupportScreenProps) {
+  const { account } = useAuth();
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       id: 'welcome',
@@ -72,8 +74,10 @@ export default function SupportScreen({ onOpenDeposit }: SupportScreenProps) {
   }, [messages, isTyping]);
 
   const handleWhatsAppSupport = () => {
-    const text = encodeURIComponent('Olá! Preciso de atendimento com o Suporte Humano / ADM da FuturoBet.');
-    window.open(`https://wa.me/5511999999999?text=${text}`, '_blank');
+    const userName = account?.name || 'Jogador FuturoBet';
+    const userCpf = account?.cpf || 'Não informado';
+    const text = `oi preciso de suporte sou: ${userName} cpf: ${userCpf}`;
+    window.open(`https://wa.me/5542999687965?text=${encodeURIComponent(text)}`, '_blank');
   };
 
   // Motor de Resposta Direto e Limpo da Ana (sem asteriscos e sem especificar jogos pontuais)
@@ -387,7 +391,7 @@ export default function SupportScreen({ onOpenDeposit }: SupportScreenProps) {
             <div>
               <div className="flex items-center gap-2">
                 <span className="text-xs font-black text-white">
-                  A IA não resolveu? Falar com Suporte Humano (ADM)
+                  Falar com Suporte Humano (ADM)
                 </span>
                 <span className="flex h-2 w-2 relative">
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
@@ -395,7 +399,7 @@ export default function SupportScreen({ onOpenDeposit }: SupportScreenProps) {
                 </span>
               </div>
               <p className="text-[11px] text-emerald-300/80 mt-0.5">
-                Para erros em jogos, travamentos ou verificação de conta no WhatsApp 24h
+                Clique para atendimento prioritário no WhatsApp 24h
               </p>
             </div>
           </div>

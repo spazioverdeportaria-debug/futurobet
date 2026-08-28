@@ -15,9 +15,170 @@ async function startServer() {
 
   app.use(express.json());
 
+  // In-memory system state & moderated deposits queue
+  interface ModeratedDeposit {
+    id: string;
+    transactionId: string;
+    cpf: string;
+    clientName: string;
+    amount: number;
+    bonusAmount: number;
+    totalAmount: number;
+    status: 'WAITING_PAYMENT' | 'PAID_PENDING_APPROVAL' | 'APPROVED' | 'REJECTED';
+    gatewayStatus: string;
+    createdAt: string;
+    updatedAt: string;
+    approvedAt?: string;
+    rejectionReason?: string;
+    pixCode?: string;
+    qrCodeUrl?: string;
+  }
+
+  const moderatedDeposits = new Map<string, ModeratedDeposit>();
+  let globalMaintenanceMode = false;
+  let globalMaintenanceMessage = 'Sistema em Manutenção para Melhorias. Voltamos em instantes!';
+
   // Health check
   app.get('/api/health', (req, res) => {
-    res.json({ status: 'ok', service: 'VegasBet SyncPay API', timestamp: new Date().toISOString() });
+    res.json({ 
+      status: 'ok', 
+      service: 'FuturoBet SyncPay & Admin API', 
+      maintenanceMode: globalMaintenanceMode,
+      timestamp: new Date().toISOString() 
+    });
+  });
+
+  // Public System Status (Maintenance Mode)
+  app.get('/api/system/status', (req, res) => {
+    res.json({
+      success: true,
+      maintenanceMode: globalMaintenanceMode,
+      maintenanceMessage: globalMaintenanceMessage,
+      timestamp: new Date().toISOString(),
+    });
+  });
+
+  // Admin Login Endpoint (User: copywriter, Pass: 3657)
+  app.post('/api/admin/login', (req, res) => {
+    const { username, password } = req.body || {};
+    if (username === 'copywriter' && String(password).trim() === '3657') {
+      return res.json({
+        success: true,
+        token: 'fb_admin_session_copywriter_3657',
+        user: {
+          username: 'copywriter',
+          role: 'SUPER_ADMIN',
+          name: 'Administrador Master',
+        },
+      });
+    }
+    return res.status(401).json({
+      success: false,
+      error: 'Credenciais de administrador inválidas.',
+    });
+  });
+
+  // Admin System Maintenance Toggle
+  app.post('/api/admin/maintenance', (req, res) => {
+    const { maintenanceMode, maintenanceMessage } = req.body || {};
+    if (typeof maintenanceMode === 'boolean') {
+      globalMaintenanceMode = maintenanceMode;
+    }
+    if (maintenanceMessage && typeof maintenanceMessage === 'string') {
+      globalMaintenanceMessage = maintenanceMessage;
+    }
+    console.log(`[Admin] Maintenance mode updated to ${globalMaintenanceMode}`);
+    return res.json({
+      success: true,
+      maintenanceMode: globalMaintenanceMode,
+      maintenanceMessage: globalMaintenanceMessage,
+    });
+  });
+
+  // Admin Get All Moderated Deposits
+  app.get('/api/admin/deposits', (req, res) => {
+    const list = Array.from(moderatedDeposits.values()).sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
+    return res.json({
+      success: true,
+      deposits: list,
+      totalPending: list.filter((d) => d.status === 'PAID_PENDING_APPROVAL' || d.status === 'WAITING_PAYMENT').length,
+      totalApproved: list.filter((d) => d.status === 'APPROVED').length,
+    });
+  });
+
+  // Admin Approve Deposit
+  app.post('/api/admin/deposits/approve', (req, res) => {
+    const { transactionId } = req.body || {};
+    if (!transactionId) {
+      return res.status(400).json({ success: false, error: 'ID da transação não informado.' });
+    }
+
+    const dep = moderatedDeposits.get(transactionId);
+    if (dep) {
+      dep.status = 'APPROVED';
+      dep.updatedAt = new Date().toISOString();
+      dep.approvedAt = new Date().toISOString();
+      moderatedDeposits.set(transactionId, dep);
+    }
+
+    // Also update pendingTransactions
+    if (pendingTransactions.has(transactionId)) {
+      const tx = pendingTransactions.get(transactionId)!;
+      tx.status = 'PAID';
+      pendingTransactions.set(transactionId, tx);
+    }
+
+    console.log(`[Admin] Deposit ${transactionId} APPROVED by ADM!`);
+    return res.json({
+      success: true,
+      message: 'Depósito aprovado com sucesso! Saldo liberado para o jogador.',
+      deposit: dep,
+    });
+  });
+
+  // Admin Reject Deposit
+  app.post('/api/admin/deposits/reject', (req, res) => {
+    const { transactionId, reason } = req.body || {};
+    if (!transactionId) {
+      return res.status(400).json({ success: false, error: 'ID da transação não informado.' });
+    }
+
+    const dep = moderatedDeposits.get(transactionId);
+    if (dep) {
+      dep.status = 'REJECTED';
+      dep.rejectionReason = reason || 'Pagamento não identificado ou cancelado pelo ADM.';
+      dep.updatedAt = new Date().toISOString();
+      moderatedDeposits.set(transactionId, dep);
+    }
+
+    return res.json({
+      success: true,
+      message: 'Depósito recusado.',
+      deposit: dep,
+    });
+  });
+
+  // Admin Stats
+  app.get('/api/admin/stats', (req, res) => {
+    const list = Array.from(moderatedDeposits.values());
+    const totalApprovedVolume = list
+      .filter((d) => d.status === 'APPROVED')
+      .reduce((sum, d) => sum + d.amount, 0);
+
+    const pendingCount = list.filter((d) => d.status === 'PAID_PENDING_APPROVAL').length;
+    const waitingCount = list.filter((d) => d.status === 'WAITING_PAYMENT').length;
+
+    return res.json({
+      success: true,
+      maintenanceMode: globalMaintenanceMode,
+      totalApprovedVolume,
+      pendingCount,
+      waitingCount,
+      totalDepositsCount: list.length,
+      serverTime: new Date().toISOString(),
+    });
   });
 
   // 1. SyncPay Deposit Endpoint
@@ -29,15 +190,41 @@ async function startServer() {
         return res.status(400).json({ success: false, error: 'Valor de depósito inválido.' });
       }
 
+      const cleanAmount = Number(amount);
+      const bonusAmount = cleanAmount; // 100% bonus
+      const totalAmount = cleanAmount + bonusAmount;
+
       const result = await createSyncPayPixDeposit({
-        amount: Number(amount),
-        clientName: clientName || 'Jogador VegasBet',
+        amount: cleanAmount,
+        clientName: clientName || 'Jogador FuturoBet',
         clientCpf,
         clientEmail,
         externalId,
       });
 
-      return res.json(result);
+      // Register into moderated queue
+      const depItem: ModeratedDeposit = {
+        id: result.transactionId,
+        transactionId: result.transactionId,
+        cpf: clientCpf || '12345678909',
+        clientName: clientName || 'Jogador FuturoBet',
+        amount: cleanAmount,
+        bonusAmount,
+        totalAmount,
+        status: 'WAITING_PAYMENT',
+        gatewayStatus: 'PENDING',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        pixCode: result.pixCode,
+        qrCodeUrl: result.qrCodeUrl,
+      };
+
+      moderatedDeposits.set(result.transactionId, depItem);
+
+      return res.json({
+        ...result,
+        moderatedStatus: 'WAITING_PAYMENT',
+      });
     } catch (error: any) {
       console.error('Error in /api/syncpay/deposit:', error);
       return res.status(500).json({ success: false, error: error.message || 'Erro ao comunicar com SyncPay.' });
@@ -60,7 +247,7 @@ async function startServer() {
         amount: Number(amount),
         pixKey,
         pixKeyType: pixKeyType || 'CPF',
-        clientName: clientName || 'Jogador VegasBet',
+        clientName: clientName || 'Jogador FuturoBet',
         clientCpf: clientCpf || '000.000.000-00',
       });
 
@@ -71,49 +258,103 @@ async function startServer() {
     }
   });
 
-  // 3. SyncPay Check Transaction Status
+  // 3. SyncPay Check Transaction Status (with manual ADM moderation support)
   app.get('/api/syncpay/check-pix/:id', async (req, res) => {
     const { id } = req.params;
     const tx = pendingTransactions.get(id);
+    const dep = moderatedDeposits.get(id);
+
+    // If ADM has already approved the deposit manually
+    if (dep && dep.status === 'APPROVED') {
+      return res.json({
+        success: true,
+        transactionId: id,
+        status: 'PAID', // Tells the client it is fully approved and ready to credit
+        moderatedStatus: 'APPROVED',
+        amount: dep.amount,
+        totalCredited: dep.totalAmount,
+        createdAt: dep.createdAt,
+      });
+    }
+
+    if (dep && dep.status === 'REJECTED') {
+      return res.json({
+        success: true,
+        transactionId: id,
+        status: 'REJECTED',
+        moderatedStatus: 'REJECTED',
+        reason: dep.rejectionReason,
+      });
+    }
 
     // Query live status from SyncPayments API
     const liveStatus = await checkSyncPayTransactionStatus(id);
     if (liveStatus === 'PAID') {
-      if (tx) {
-        tx.status = 'PAID';
-        pendingTransactions.set(id, tx);
+      // SyncPay received the money! Now transition to moderation queue awaiting ADM confirmation!
+      if (dep && dep.status === 'WAITING_PAYMENT') {
+        dep.status = 'PAID_PENDING_APPROVAL';
+        dep.gatewayStatus = 'PAID';
+        dep.updatedAt = new Date().toISOString();
+        moderatedDeposits.set(id, dep);
       }
+
+      // If already marked as approved by ADM
+      if (dep?.status === 'APPROVED') {
+        return res.json({
+          success: true,
+          transactionId: id,
+          status: 'PAID',
+          moderatedStatus: 'APPROVED',
+          amount: dep.amount,
+          totalCredited: dep.totalAmount,
+        });
+      }
+
+      // Return state telling user: Gateway received payment, waiting for ADM queue release!
       return res.json({
         success: true,
         transactionId: id,
-        status: 'PAID',
-        amount: tx?.amount,
-        createdAt: tx?.createdAt,
+        status: 'PAID_PENDING_APPROVAL',
+        moderatedStatus: 'PAID_PENDING_APPROVAL',
+        amount: dep?.amount || tx?.amount,
+        createdAt: dep?.createdAt || tx?.createdAt,
       });
-    }
-
-    if (!tx) {
-      return res.json({ success: true, transactionId: id, status: liveStatus });
     }
 
     return res.json({
       success: true,
       transactionId: id,
-      status: tx.status,
-      amount: tx.amount,
-      createdAt: tx.createdAt,
+      status: dep?.status || tx?.status || 'PENDING',
+      moderatedStatus: dep?.status || 'WAITING_PAYMENT',
+      amount: dep?.amount || tx?.amount,
+      createdAt: dep?.createdAt || tx?.createdAt,
     });
   });
 
-  // 4. Simulate Payment Completion for testing in UI
+  // 4. Simulate Payment Completion for testing in UI / Gateway Signal
   app.post('/api/syncpay/simulate-pay', (req, res) => {
     const { transactionId } = req.body;
-    if (transactionId && pendingTransactions.has(transactionId)) {
-      const tx = pendingTransactions.get(transactionId)!;
-      tx.status = 'PAID';
-      pendingTransactions.set(transactionId, tx);
+    if (transactionId) {
+      if (pendingTransactions.has(transactionId)) {
+        const tx = pendingTransactions.get(transactionId)!;
+        tx.status = 'PAID';
+        pendingTransactions.set(transactionId, tx);
+      }
+      if (moderatedDeposits.has(transactionId)) {
+        const dep = moderatedDeposits.get(transactionId)!;
+        if (dep.status === 'WAITING_PAYMENT') {
+          dep.status = 'PAID_PENDING_APPROVAL';
+          dep.gatewayStatus = 'PAID';
+          dep.updatedAt = new Date().toISOString();
+          moderatedDeposits.set(transactionId, dep);
+        }
+      }
     }
-    return res.json({ success: true, status: 'PAID', message: 'Pagamento marcado como concluído no SyncPay!' });
+    return res.json({ 
+      success: true, 
+      status: 'PAID_PENDING_APPROVAL', 
+      message: 'Sinal de pagamento recebido pelo gateway! Depósito aguardando confirmação no Painel ADM.' 
+    });
   });
 
   // 5. SyncPay & Astrofy Webhook Handlers (Postback callbacks)
@@ -136,12 +377,23 @@ async function startServer() {
         rawStatus.includes('PAID') ||
         rawStatus.includes('APPROVED');
 
-      if (txId && pendingTransactions.has(txId)) {
+      if (txId) {
         if (isPaid) {
-          const tx = pendingTransactions.get(txId)!;
-          tx.status = 'PAID';
-          pendingTransactions.set(txId, tx);
-          console.log(`[SyncPay/Astrofy] Transaction ${txId} marked as PAID via webhook.`);
+          if (pendingTransactions.has(txId)) {
+            const tx = pendingTransactions.get(txId)!;
+            tx.status = 'PAID';
+            pendingTransactions.set(txId, tx);
+          }
+          if (moderatedDeposits.has(txId)) {
+            const dep = moderatedDeposits.get(txId)!;
+            if (dep.status === 'WAITING_PAYMENT') {
+              dep.status = 'PAID_PENDING_APPROVAL';
+              dep.gatewayStatus = 'PAID';
+              dep.updatedAt = new Date().toISOString();
+              moderatedDeposits.set(txId, dep);
+            }
+          }
+          console.log(`[SyncPay/Astrofy] Transaction ${txId} payment received via webhook, now awaiting ADM moderation.`);
         }
       }
 

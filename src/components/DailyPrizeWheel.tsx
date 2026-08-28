@@ -125,24 +125,28 @@ export default function DailyPrizeWheel({
     soundEngine.playSpinSound();
     soundEngine.playWheelSpinSequence(7);
 
-    // House edge retention target: Lands on one of the 4 "TENTE NOVAMENTE" segments
-    // Slices at 45°, 135°, 225°, 315°
+    // House edge retention target: Lands DEAD CENTER on one of the 4 "TENTE NOVAMENTE" segments
+    // In the wheel graphic, spokes are at 0°, 45°, 90°, 135°, 180°, 225°, 270°, 315°
+    // The centers of the 4 "TENTE NOVAMENTE" slices are at 22.5°, 112.5°, 202.5°, 292.5°
     const retrySlices = [
-      { angle: 45, segment: SEGMENTS[1] },
-      { angle: 135, segment: SEGMENTS[3] },
-      { angle: 225, segment: SEGMENTS[5] },
-      { angle: 315, segment: SEGMENTS[7] },
+      { angle: 22.5, segment: SEGMENTS[1] },
+      { angle: 112.5, segment: SEGMENTS[3] },
+      { angle: 202.5, segment: SEGMENTS[5] },
+      { angle: 292.5, segment: SEGMENTS[7] },
     ];
     const chosenRetry = retrySlices[Math.floor(Math.random() * retrySlices.length)];
     const chosenPrize = chosenRetry.segment;
 
     // Continuous smooth forward rotation degree formula over 7.5 seconds
-    const fullSpins = 10; // 10 high-speed revolutions for suspense
+    const fullSpins = 8; // 8 high-speed revolutions for maximum suspense
     const currentModulo = rotationDegree % 360;
     // To align slice at angle θ with top pointer (0°), target rotation = (360 - θ)
     const targetSliceAngle = (360 - chosenRetry.angle) % 360;
-    const additionalDegrees = (360 - currentModulo + targetSliceAngle) % 360;
-    const targetAngle = rotationDegree + 360 * fullSpins + (additionalDegrees === 0 ? 360 : additionalDegrees);
+    let additionalDegrees = targetSliceAngle - currentModulo;
+    if (additionalDegrees <= 0) {
+      additionalDegrees += 360;
+    }
+    const targetAngle = rotationDegree + 360 * fullSpins + additionalDegrees;
 
     setRotationDegree(targetAngle);
     setSpinCount((prev) => prev + 1);
@@ -217,16 +221,16 @@ export default function DailyPrizeWheel({
         </p>
       </div>
 
-      {/* 4. THE CASINO WHEEL (NO GAP BETWEEN BORDER & PRIZE DISC) */}
-      <div className="relative w-[90vw] max-w-[360px] aspect-square my-auto flex items-center justify-center relative z-20 shrink-0">
+      {/* 4. THE CASINO WHEEL (NO GAP - WOODEN WHEEL DISC FILLS CONTAINER) */}
+      <div className="relative w-[92vw] max-w-[370px] aspect-square my-auto flex items-center justify-center relative z-20 shrink-0">
         
         {/* Outer Glow Halo */}
-        <div className="absolute inset-[-15px] bg-[radial-gradient(circle,rgba(255,215,0,0.45)_0%,transparent_70%)] rounded-full blur-xl pointer-events-none" />
+        <div className="absolute inset-[-10px] bg-[radial-gradient(circle,rgba(255,215,0,0.35)_0%,transparent_70%)] rounded-full blur-xl pointer-events-none" />
 
-        {/* Thinner, Elegant Outer Brass/Gold Frame Rim */}
-        <div className="absolute w-full h-full rounded-full bg-gradient-to-br from-[#ffd977] via-[#b88e34] to-[#422e08] shadow-[0_20px_60px_rgba(0,0,0,0.95),inset_0_4px_10px_rgba(255,255,255,0.9),inset_0_-4px_10px_rgba(0,0,0,0.95)] border-[2.5px] border-[#fff7c2] flex items-center justify-center">
+        {/* Outer Brass/Gold Frame Rim */}
+        <div className="absolute w-full h-full rounded-full bg-gradient-to-br from-[#ffd977] via-[#b88e34] to-[#422e08] shadow-[0_16px_50px_rgba(0,0,0,0.95),inset_0_3px_8px_rgba(255,255,255,0.9),inset_0_-4px_10px_rgba(0,0,0,0.95)] border-[2.5px] border-[#fff7c2] flex items-center justify-center">
           
-          {/* Subtle Glowing Casino Lights Around Thin Rim */}
+          {/* Subtle Glowing Casino Lights Around Rim */}
           <div className="absolute inset-0 rounded-full flex items-center justify-center pointer-events-none z-20">
             <div className="w-full h-full absolute">
               {Array.from({ length: 12 }).map((_, i) => {
@@ -234,10 +238,10 @@ export default function DailyPrizeWheel({
                 return (
                   <div
                     key={i}
-                    className="absolute w-3 h-3 rounded-full bg-white shadow-[0_0_10px_#fff,0_0_16px_#ffd700] border border-[#ffeb99]"
+                    className="absolute w-2.5 h-2.5 rounded-full bg-white shadow-[0_0_8px_#fff,0_0_14px_#ffd700] border border-[#ffeb99]"
                     style={{
-                      top: `calc(50% - 6px + calc(48.5% * ${Math.sin((angle * Math.PI) / 180)}))`,
-                      left: `calc(50% - 6px + calc(48.5% * ${Math.cos((angle * Math.PI) / 180)}))`,
+                      top: `calc(50% - 5px + calc(48.2% * ${Math.sin((angle * Math.PI) / 180)}))`,
+                      left: `calc(50% - 5px + calc(48.2% * ${Math.cos((angle * Math.PI) / 180)}))`,
                     }}
                   />
                 );
@@ -245,8 +249,8 @@ export default function DailyPrizeWheel({
             </div>
           </div>
 
-          {/* Inner Wheel Disc Holder - Full Fit 97% Seamless to Outer Rim (No Gap) */}
-          <div className="w-[97%] h-[97%] rounded-full relative overflow-hidden flex items-center justify-center shadow-[inset_0_4px_12px_rgba(0,0,0,0.8)]">
+          {/* Inner Wheel Disc Holder - Scaled to 1.30 to remove dead border space */}
+          <div className="w-[96%] h-[96%] rounded-full relative overflow-hidden flex items-center justify-center shadow-[inset_0_4px_14px_rgba(0,0,0,0.95)] bg-[#120800]">
             
             {/* ROTATING 3D WHEEL DISC WITH 8 SECTORS */}
             <div
@@ -259,7 +263,7 @@ export default function DailyPrizeWheel({
                 src={wheelDiscImg}
                 alt="Roleta de Prêmios FuturoBet"
                 referrerPolicy="no-referrer"
-                className="w-full h-full object-cover scale-[1.01] rounded-full select-none pointer-events-none"
+                className="w-full h-full object-cover scale-[1.30] rounded-full select-none pointer-events-none"
               />
             </div>
 

@@ -42,7 +42,7 @@ export default function BottomNav({ currentTab, onTabChange, onOpenDeposit, onOp
   ];
 
   return (
-    <nav className="w-full bg-[#070d18] border-t border-slate-800/80 px-2 py-2 pb-safe flex items-center justify-between sticky bottom-0 z-40 shadow-[0_-8px_25px_rgba(0,0,0,0.85)] select-none">
+    <nav className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md bg-[#070d18]/95 backdrop-blur-md border-t border-slate-800/90 px-2.5 py-2 z-40 shadow-[0_-10px_35px_rgba(0,0,0,0.95)] select-none flex items-center justify-between">
       
       {/* Navigation Items (Menu, Cassino, Esportes, Área VIP) */}
       <div className="flex items-center justify-around flex-1 mr-1.5">

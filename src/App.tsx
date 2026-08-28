@@ -16,7 +16,10 @@ import PromotionsSection from './components/PromotionsSection';
 import DailyPrizeWheel from './components/DailyPrizeWheel';
 import AuthModal from './components/AuthModal';
 import UserProfileModal from './components/UserProfileModal';
+import AdminPanel from './components/AdminPanel';
+import MaintenanceScreen from './components/MaintenanceScreen';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { db, doc, onSnapshot } from './lib/firebase';
 
 import { GAMES_CATALOG, GameConfig } from './data/gamesConfig';
 import { getOrFetchFootballMatches } from './data/footballCache';
@@ -25,6 +28,68 @@ import { Sparkles, Trophy, Flame, ShieldCheck, Headphones, Zap, Gift } from 'luc
 function FuturoBetContent() {
   const { account, isLoggedIn, updateBalance, logout } = useAuth();
   
+  // Route check for /admin
+  const [isAdminRoute, setIsAdminRoute] = useState<boolean>(() => {
+    const p = window.location.pathname.toLowerCase();
+    const h = window.location.hash.toLowerCase();
+    return p === '/admin' || p.startsWith('/admin/') || h === '#admin' || h.startsWith('#/admin');
+  });
+
+  // Maintenance state
+  const [isMaintenanceActive, setIsMaintenanceActive] = useState<boolean>(false);
+  const [maintenanceMessage, setMaintenanceMessage] = useState<string>(
+    'Estamos realizando melhorias programadas em nossos servidores. Voltamos em instantes!'
+  );
+
+  useEffect(() => {
+    const checkPath = () => {
+      const p = window.location.pathname.toLowerCase();
+      const h = window.location.hash.toLowerCase();
+      setIsAdminRoute(p === '/admin' || p.startsWith('/admin/') || h === '#admin' || h.startsWith('#/admin'));
+    };
+
+    window.addEventListener('popstate', checkPath);
+    window.addEventListener('hashchange', checkPath);
+    return () => {
+      window.removeEventListener('popstate', checkPath);
+      window.removeEventListener('hashchange', checkPath);
+    };
+  }, []);
+
+  // Real-time maintenance status sync
+  useEffect(() => {
+    // Check API
+    fetch('/api/system/status')
+      .then((r) => r.json())
+      .then((data) => {
+        if (typeof data.maintenanceMode === 'boolean') {
+          setIsMaintenanceActive(data.maintenanceMode);
+        }
+        if (data.maintenanceMessage) {
+          setMaintenanceMessage(data.maintenanceMessage);
+        }
+      })
+      .catch(() => null);
+
+    // Check Firestore
+    try {
+      const unsub = onSnapshot(doc(db, 'system_settings', 'config'), (snap) => {
+        if (snap.exists()) {
+          const data = snap.data();
+          if (typeof data.maintenanceMode === 'boolean') {
+            setIsMaintenanceActive(data.maintenanceMode);
+          }
+          if (data.maintenanceMessage) {
+            setMaintenanceMessage(data.maintenanceMessage);
+          }
+        }
+      });
+      return () => unsub();
+    } catch (e) {
+      console.warn('System settings listener notice:', e);
+    }
+  }, []);
+
   const [localBalance, setLocalBalance] = useState<number>(() => {
     const saved = localStorage.getItem('vegas_local_balance');
     return saved !== null ? Math.max(0, parseFloat(saved)) : 50.00;
@@ -192,14 +257,39 @@ function FuturoBetContent() {
     window.scrollTo({ top: 0, behavior: 'instant' });
   };
 
+  // 🛡️ 1. Render Admin Panel if on /admin route
+  if (isAdminRoute) {
+    return (
+      <AdminPanel
+        onBackToCasino={() => {
+          window.history.pushState({}, '', '/');
+          setIsAdminRoute(false);
+        }}
+      />
+    );
+  }
+
+  // 🛡️ 2. Render Maintenance Screen if casino is paused
+  if (isMaintenanceActive) {
+    return (
+      <MaintenanceScreen
+        message={maintenanceMessage}
+        onAdminAccess={() => {
+          window.history.pushState({}, '', '/admin');
+          setIsAdminRoute(true);
+        }}
+      />
+    );
+  }
+
   return (
     <div className="w-full min-h-screen min-h-[100dvh] bg-[#03070e] text-slate-100 flex justify-center items-start font-sans antialiased selection:bg-amber-400 selection:text-black overflow-x-hidden">
       
       {/* Mobile Frame Container for FuturoBet - Locked to Mobile Viewport */}
       <div className="w-full max-w-md min-h-screen min-h-[100dvh] bg-[#060a14] flex flex-col justify-between relative shadow-[0_0_50px_rgba(0,0,0,0.8)] sm:border-x border-[#131d33] overflow-x-hidden">
         
-        {/* Main Content Area */}
-        <div className="w-full flex-1 flex flex-col pb-2">
+        {/* Main Content Area (pb-20 garante que os jogos nunca fiquem escondidos atrás da barra fixa) */}
+        <div className="w-full flex-1 flex flex-col pb-20">
           
           {/* TOP HEADER BAR - Sempre no topo fixo */}
           <Header

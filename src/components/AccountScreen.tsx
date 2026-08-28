@@ -91,7 +91,7 @@ const VIP_LEVELS: VIPLevel[] = [
 ];
 
 export default function AccountScreen({ balance, onOpenDeposit }: AccountScreenProps) {
-  const { user, profile, loginWithGoogle, logout, updateBalance } = useAuth();
+  const { account, isLoggedIn, logout, updateBalance } = useAuth();
   
   // Navigation & Modals
   const [activeTab, setActiveTab] = useState<'VISAO_GERAL' | 'VIP_CLUB' | 'EXTRATO' | 'CONFIGS'>('VISAO_GERAL');
@@ -160,8 +160,8 @@ export default function AccountScreen({ balance, onOpenDeposit }: AccountScreenP
           amount: val,
           pixKey: pixKey.trim(),
           pixKeyType,
-          clientName: user?.displayName || 'Jogador FuturoBet',
-          clientCpf: user?.email || '000.000.000-00',
+          clientName: account?.name || 'Jogador FuturoBet',
+          clientCpf: account?.cpf || '000.000.000-00',
         }),
       });
 
@@ -219,11 +219,7 @@ export default function AccountScreen({ balance, onOpenDeposit }: AccountScreenP
             <div className="relative cursor-pointer" onClick={() => setShowProfileModal(true)}>
               <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-amber-500 via-yellow-300 to-amber-600 p-0.5 shadow-[0_0_20px_rgba(245,158,11,0.3)]">
                 <div className="w-full h-full bg-[#0a0a0d] rounded-[14px] flex items-center justify-center overflow-hidden">
-                  {user?.photoURL ? (
-                    <img src={user.photoURL} alt="Profile" referrerPolicy="no-referrer" className="w-full h-full object-cover" />
-                  ) : (
-                    <span className="text-2xl">{selectedAvatar}</span>
-                  )}
+                  <span className="text-2xl">{selectedAvatar}</span>
                 </div>
               </div>
               <span className="absolute -bottom-1 -right-1 bg-emerald-500 text-black rounded-full p-0.5 border-2 border-black" title="Conta VIP Verificada">
@@ -235,7 +231,7 @@ export default function AccountScreen({ balance, onOpenDeposit }: AccountScreenP
             <div>
               <div className="flex items-center gap-1.5">
                 <span className="text-base font-black text-amber-100 uppercase tracking-tight">
-                  {user ? (user.displayName || user.email?.split('@')[0]) : 'Jogador FuturoBet'}
+                  {account?.name || 'Jogador FuturoBet'}
                 </span>
                 <BadgeCheck size={18} className="text-amber-400 fill-amber-400/20 shrink-0" />
               </div>
@@ -253,23 +249,13 @@ export default function AccountScreen({ balance, onOpenDeposit }: AccountScreenP
 
           </div>
 
-          {/* Login or Edit CTA */}
-          {!user ? (
-            <button
-              onClick={loginWithGoogle}
-              className="px-3.5 py-2 bg-gradient-to-r from-amber-500 to-yellow-400 text-black rounded-xl font-black text-xs flex items-center gap-1.5 shadow-lg active:scale-95 transition cursor-pointer"
-            >
-              <LogIn size={15} />
-              <span>Entrar</span>
-            </button>
-          ) : (
-            <button
-              onClick={() => setShowProfileModal(true)}
-              className="px-3 py-1.5 bg-black/60 hover:bg-black text-amber-300 hover:text-white rounded-xl border border-amber-500/30 transition active:scale-95 cursor-pointer text-xs font-bold"
-            >
-              Editar
-            </button>
-          )}
+          {/* Edit Profile CTA */}
+          <button
+            onClick={() => setShowProfileModal(true)}
+            className="px-3 py-1.5 bg-black/60 hover:bg-black text-amber-300 hover:text-white rounded-xl border border-amber-500/30 transition active:scale-95 cursor-pointer text-xs font-bold"
+          >
+            Editar Perfil
+          </button>
         </div>
 
         {/* Level Progress Bar & Benefits Modal Trigger */}
@@ -654,21 +640,13 @@ export default function AccountScreen({ balance, onOpenDeposit }: AccountScreenP
             </div>
           </div>
 
-          {user ? (
+          {isLoggedIn && (
             <button
               onClick={logout}
               className="w-full py-3 bg-[#121217] border border-red-500/40 hover:border-red-500 text-red-400 font-black text-xs uppercase tracking-wider rounded-2xl transition cursor-pointer flex items-center justify-center gap-2"
             >
               <LogOut size={16} />
-              <span>Sair da Conta Google</span>
-            </button>
-          ) : (
-            <button
-              onClick={loginWithGoogle}
-              className="w-full py-3 bg-[#121217] border border-amber-500/40 hover:border-amber-400 text-amber-300 font-black text-xs uppercase tracking-wider rounded-2xl transition cursor-pointer flex items-center justify-center gap-2"
-            >
-              <LogIn size={16} />
-              <span>Conectar com Google</span>
+              <span>Sair da Conta</span>
             </button>
           )}
 
@@ -850,17 +828,23 @@ export default function AccountScreen({ balance, onOpenDeposit }: AccountScreenP
             </div>
 
             <p className="text-xs text-zinc-300 leading-relaxed">
-              Equipe dedicada de suporte pronta para resolver qualquer dúvida sobre depósitos PIX, saques SyncPay e regras de jogos com tempo médio de resposta em menos de 1 minuto.
+              Equipe dedicada de suporte pronta para resolver qualquer dúvida sobre depósitos PIX, saques e regras de jogos com tempo médio de resposta em menos de 1 minuto.
             </p>
 
             <button
               onClick={() => {
-                window.open('https://wa.me/?text=Olá,%20sou%20membro%20VIP%20da%20FuturoBet%20e%20preciso%20de%20atendimento', '_blank');
+                let msg = 'Olá! Preciso de suporte na FuturoBet.\n\n';
+                if (account?.name || account?.cpf) {
+                  msg += `👤 Nome: ${account.name || 'Jogador'}\n`;
+                  msg += `📄 CPF: ${account.cpf || 'Não informado'}\n\n`;
+                }
+                msg += 'Preciso de ajuda com: ';
+                window.open(`https://wa.me/5542999687965?text=${encodeURIComponent(msg)}`, '_blank');
               }}
               className="w-full py-3.5 bg-gradient-to-r from-emerald-500 to-emerald-600 text-black font-black text-xs uppercase rounded-xl shadow-[0_0_20px_rgba(16,185,129,0.4)] cursor-pointer flex items-center justify-center gap-2 transition hover:brightness-110"
             >
               <MessageSquare size={16} className="fill-black" />
-              <span>CHAMAR NO WHATSAPP VIP 24H</span>
+              <span>CHAMAR NO WHATSAPP 24H</span>
             </button>
 
             <button

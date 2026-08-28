@@ -2,9 +2,11 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   X, QrCode, Copy, Check, Zap, RefreshCw, 
   Clock, CheckCircle2, Sparkles, ArrowRight, 
-  Loader2, ArrowLeft, ShieldCheck, CheckCircle
+  Loader2, ArrowLeft, ShieldCheck, CheckCircle,
+  AlertCircle, Users, Hourglass
 } from 'lucide-react';
 import { soundEngine } from '../utils/audio';
+import { db, doc, setDoc, onSnapshot } from '../lib/firebase';
 
 interface DepositModalProps {
   isOpen: boolean;
@@ -37,7 +39,7 @@ export default function DepositModal({ isOpen, onClose, onSuccessDeposit }: Depo
   const [showOptionalFields, setShowOptionalFields] = useState<boolean>(false);
   
   const [isCheckingPayment, setIsCheckingPayment] = useState<boolean>(false);
-  const [hasNotifiedPayment, setHasNotifiedPayment] = useState<boolean>(false);
+  const [isWaitingAdminApproval, setIsWaitingAdminApproval] = useState<boolean>(false);
   const [isPaymentConfirmed, setIsPaymentConfirmed] = useState<boolean>(false);
   const checkIntervalRef = useRef<any>(null);
 
@@ -63,32 +65,71 @@ export default function DepositModal({ isOpen, onClose, onSuccessDeposit }: Depo
     return () => clearInterval(timer);
   }, [showPixScreen, timeLeft, isPaymentConfirmed]);
 
-  // Polling to verify transaction status automatically every 4s
+  // Firestore Real-time listener for deposit document
+  useEffect(() => {
+    if (!showPixScreen || !pixData?.transactionId || isPaymentConfirmed) return;
+
+    try {
+      const unsub = onSnapshot(doc(db, 'deposits', pixData.transactionId), (snap) => {
+        if (snap.exists()) {
+          const data = snap.data();
+          if (data.status === 'APPROVED') {
+            setIsWaitingAdminApproval(false);
+            setIsPaymentConfirmed(true);
+            soundEngine.playWinChime();
+            onSuccessDeposit(totalCredited);
+          } else if (data.status === 'PAID_PENDING_APPROVAL') {
+            setIsWaitingAdminApproval(true);
+          }
+        }
+      });
+      return () => unsub();
+    } catch (e) {
+      console.warn('Firestore snapshot error on deposits:', e);
+    }
+  }, [showPixScreen, pixData?.transactionId, isPaymentConfirmed, totalCredited, onSuccessDeposit]);
+
+  // Polling to verify transaction status automatically every 2.5s
   useEffect(() => {
     if (!showPixScreen || !pixData?.transactionId || isPaymentConfirmed) {
       if (checkIntervalRef.current) clearInterval(checkIntervalRef.current);
       return;
     }
 
-    checkIntervalRef.current = setInterval(async () => {
+    const checkStatus = async () => {
       try {
         const res = await fetch(`/api/syncpay/check-pix/${encodeURIComponent(pixData.transactionId)}`);
         if (res.ok) {
           const data = await res.json();
-          if (data && data.status === 'PAID') {
+          if (data && (data.status === 'PAID' || data.moderatedStatus === 'APPROVED')) {
+            setIsWaitingAdminApproval(false);
             setIsPaymentConfirmed(true);
             soundEngine.playWinChime();
             onSuccessDeposit(totalCredited);
-            clearInterval(checkIntervalRef.current);
+            if (checkIntervalRef.current) clearInterval(checkIntervalRef.current);
+          } else if (data && (data.status === 'PAID_PENDING_APPROVAL' || data.moderatedStatus === 'PAID_PENDING_APPROVAL')) {
+            setIsWaitingAdminApproval(true);
           }
         }
       } catch (err) {
         // Silently continue polling
       }
-    }, 4000);
+    };
+
+    checkIntervalRef.current = setInterval(checkStatus, 2500);
+
+    // Immediate check when returning from banking app (focus / visibilitychange)
+    const handleFocusCheck = () => {
+      checkStatus();
+    };
+
+    window.addEventListener('focus', handleFocusCheck);
+    document.addEventListener('visibilitychange', handleFocusCheck);
 
     return () => {
       if (checkIntervalRef.current) clearInterval(checkIntervalRef.current);
+      window.removeEventListener('focus', handleFocusCheck);
+      document.removeEventListener('visibilitychange', handleFocusCheck);
     };
   }, [showPixScreen, pixData?.transactionId, isPaymentConfirmed, totalCredited, onSuccessDeposit]);
 
@@ -184,7 +225,7 @@ export default function DepositModal({ isOpen, onClose, onSuccessDeposit }: Depo
     setIsProcessing(true);
     setErrorMessage(null);
     soundEngine.playCashierBeep();
-    setHasNotifiedPayment(false);
+    setIsWaitingAdminApproval(false);
     setIsPaymentConfirmed(false);
 
     try {
@@ -226,6 +267,27 @@ export default function DepositModal({ isOpen, onClose, onSuccessDeposit }: Depo
         setPixData(createdData);
         setShowPixScreen(true);
         setTimeLeft(900);
+
+        // Store into Firestore for real-time admin queue sync
+        try {
+          await setDoc(doc(db, 'deposits', createdData.transactionId), {
+            id: createdData.transactionId,
+            transactionId: createdData.transactionId,
+            cpf: clientCpf || '12345678909',
+            clientName: clientName || 'Jogador FuturoBet',
+            amount: finalAmount,
+            bonusAmount,
+            totalAmount: totalCredited,
+            status: 'WAITING_PAYMENT',
+            gatewayStatus: 'PENDING',
+            pixCode: createdData.pixCode,
+            qrCodeUrl: createdData.qrCodeUrl,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          });
+        } catch (fErr) {
+          console.warn('Firestore deposit sync notice:', fErr);
+        }
       } else {
         throw new Error('Não foi possível gerar a cobrança PIX no momento. Tente novamente em instantes.');
       }
@@ -251,18 +313,27 @@ export default function DepositModal({ isOpen, onClose, onSuccessDeposit }: Depo
     setIsCheckingPayment(true);
 
     try {
+      // Send simulate-pay or check signal to gateway
+      await fetch('/api/syncpay/simulate-pay', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ transactionId: pixData.transactionId }),
+      }).catch(() => null);
+
       const res = await fetch(`/api/syncpay/check-pix/${encodeURIComponent(pixData.transactionId)}`);
       const data = await res.json();
 
-      if (data && data.status === 'PAID') {
+      if (data && (data.status === 'PAID' || data.moderatedStatus === 'APPROVED')) {
+        setIsWaitingAdminApproval(false);
         setIsPaymentConfirmed(true);
         soundEngine.playWinChime();
         onSuccessDeposit(totalCredited);
       } else {
-        setHasNotifiedPayment(true);
+        // Enters the moderated waiting screen
+        setIsWaitingAdminApproval(true);
       }
     } catch (err) {
-      setHasNotifiedPayment(true);
+      setIsWaitingAdminApproval(true);
     } finally {
       setIsCheckingPayment(false);
     }
@@ -505,6 +576,39 @@ export default function DepositModal({ isOpen, onClose, onSuccessDeposit }: Depo
                   JOGAR AGORA
                 </button>
               </div>
+            ) : isWaitingAdminApproval ? (
+              <div className="py-6 px-4 bg-[#10121a] border border-amber-500/50 rounded-2xl text-center space-y-4 animate-in zoom-in-95 duration-200">
+                <div className="w-14 h-14 bg-amber-500/15 border border-amber-400/80 rounded-full mx-auto flex items-center justify-center text-amber-400 shadow-[0_0_25px_rgba(245,158,11,0.3)]">
+                  <Loader2 className="w-7 h-7 animate-spin text-amber-400" />
+                </div>
+
+                <div className="space-y-1">
+                  <h4 className="text-base font-black text-amber-400 uppercase tracking-wide">
+                    PROCESSANDO PAGAMENTO...
+                  </h4>
+                </div>
+
+                <div className="p-3.5 bg-amber-950/40 border border-amber-500/30 rounded-xl text-center space-y-2">
+                  <p className="text-xs text-zinc-200 font-medium leading-relaxed">
+                    Aguarde alguns minutos. O sistema está apresentando falhas temporárias no processamento.
+                  </p>
+                  <p className="text-[11px] text-zinc-400">
+                    Seu saldo de <strong className="text-amber-400 font-mono">R$ {formatBRL(totalCredited)}</strong> será creditado em instantes.
+                  </p>
+                </div>
+
+                <div className="flex items-center justify-center gap-2 text-[11px] text-zinc-400 pt-1">
+                  <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+                  <span>Sincronizando com o sistema...</span>
+                </div>
+
+                <button
+                  onClick={onClose}
+                  className="w-full py-2 bg-zinc-800/80 hover:bg-zinc-700 text-xs text-zinc-300 hover:text-white font-bold rounded-xl transition cursor-pointer text-center"
+                >
+                  Fechar janela (saldo será creditado)
+                </button>
+              </div>
             ) : (
               <>
                 {/* Modern Crisp QR Code Frame */}
@@ -569,44 +673,19 @@ export default function DepositModal({ isOpen, onClose, onSuccessDeposit }: Depo
                   </div>
                 </div>
 
-                {/* Verification Notice */}
-                {hasNotifiedPayment && (
-                  <div className="p-2.5 bg-amber-950/40 border border-amber-500/40 rounded-xl space-y-0.5 animate-in fade-in duration-150">
-                    <div className="flex items-center gap-1.5 text-amber-400">
-                      <Loader2 className="w-3 h-3 animate-spin shrink-0" />
-                      <span className="text-[10px] font-black uppercase tracking-wide">
-                        COMPENSAÇÃO EM ANDAMENTO
-                      </span>
-                    </div>
-                    <p className="text-[10.5px] text-zinc-300 leading-snug">
-                      Pagamento em processamento no Banco Central. Seu saldo será liberado automaticamente.
-                    </p>
-                  </div>
-                )}
+                {/* Status Indicator */}
+                <div className="py-2 px-3 bg-[#11131a] border border-zinc-800/80 rounded-xl flex items-center justify-center gap-2 text-zinc-300">
+                  <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-400 shrink-0" />
+                  <span className="text-[11.5px] font-medium text-zinc-300">
+                    Aguardando confirmação do pagamento...
+                  </span>
+                </div>
 
-                {/* Main Action Buttons */}
-                <div className="space-y-2 pt-1">
-                  <button
-                    onClick={handleVerifyPaymentStatus}
-                    disabled={isCheckingPayment}
-                    className="w-full py-3 bg-gradient-to-r from-amber-400 via-yellow-400 to-amber-500 text-black font-black text-xs uppercase tracking-wider rounded-xl shadow-[0_0_20px_rgba(245,158,11,0.35)] hover:brightness-110 active:scale-[0.98] transition-all cursor-pointer flex items-center justify-center gap-2 disabled:opacity-60"
-                  >
-                    {isCheckingPayment ? (
-                      <>
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                        <span>VERIFICANDO NO BANCO...</span>
-                      </>
-                    ) : (
-                      <>
-                        <RefreshCw className="w-3.5 h-3.5" />
-                        <span>JÁ FIZ O PAGAMENTO / VERIFICAR</span>
-                      </>
-                    )}
-                  </button>
-
+                {/* Bottom Back Button */}
+                <div className="pt-1">
                   <button
                     onClick={() => setShowPixScreen(false)}
-                    className="w-full py-1 text-xs text-zinc-400 hover:text-white font-medium transition cursor-pointer text-center flex items-center justify-center gap-1"
+                    className="w-full py-1.5 text-xs text-zinc-400 hover:text-white font-medium transition cursor-pointer text-center flex items-center justify-center gap-1"
                   >
                     <ArrowLeft className="w-3.5 h-3.5" />
                     <span>Voltar e alterar valor</span>
