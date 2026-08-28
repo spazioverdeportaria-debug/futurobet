@@ -251,27 +251,133 @@ export default function AdminPanel({ onBackToCasino }: AdminPanelProps) {
     }
   }, [isAdminAuthenticated]);
 
-  // 3. Listen to Users List (Real-time Firestore)
+  // 3. Listen to Users List (Real-time Firestore + Backend API + Local Storage Aggregation)
   useEffect(() => {
     if (!isAdminAuthenticated) return;
 
+    // A) Scan and auto-sync any existing accounts stored in local browser cache to Firestore & Backend
+    try {
+      const localUsers: UserProfile[] = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && (key.startsWith('futurobet_user_') || key.startsWith('vegasbet_user_') || key === 'futurobet_auth_session')) {
+          const raw = localStorage.getItem(key);
+          if (raw) {
+            try {
+              const u = JSON.parse(raw);
+              if (u && u.cpf) {
+                const cleanCpf = String(u.cpf).replace(/\D/g, '');
+                localUsers.push({
+                  cpf: cleanCpf,
+                  name: u.name || 'Jogador FuturoBet',
+                  phone: u.phone || '',
+                  passwordHash: u.passwordHash || '',
+                  balance: typeof u.balance === 'number' ? u.balance : 50.00,
+                  balanceBonus: typeof u.balanceBonus === 'number' ? u.balanceBonus : 0.00,
+                  createdAt: u.createdAt || new Date().toISOString(),
+                  updatedAt: u.updatedAt || new Date().toISOString(),
+                });
+              }
+            } catch (e) {
+              // ignore
+            }
+          }
+        }
+      }
+
+      if (localUsers.length > 0) {
+        // Sync to backend
+        fetch('/api/users/sync', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ users: localUsers }),
+        }).catch(() => null);
+
+        // Sync to Firestore
+        localUsers.forEach(async (u) => {
+          if (u.cpf) {
+            try {
+              await setDoc(doc(db, 'users', u.cpf), u, { merge: true });
+            } catch (e) {
+              // ignore
+            }
+          }
+        });
+      }
+    } catch (e) {
+      console.warn('Local users discovery note:', e);
+    }
+
+    // B) Fetch from Backend periodically
+    const fetchServerUsers = () => {
+      fetch('/api/admin/users')
+        .then((r) => r.json())
+        .then((data) => {
+          if (data.success && Array.isArray(data.users)) {
+            setUsers((prev) => {
+              const map = new Map<string, UserProfile>();
+              prev.forEach((u) => map.set(u.cpf.replace(/\D/g, ''), u));
+              data.users.forEach((u: UserProfile) => {
+                const clean = u.cpf.replace(/\D/g, '');
+                if (clean) map.set(clean, { ...map.get(clean), ...u, cpf: clean });
+              });
+              const list = Array.from(map.values());
+              list.sort((a, b) => {
+                const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+                const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+                return timeB - timeA;
+              });
+              return list;
+            });
+          }
+        })
+        .catch(() => null);
+    };
+
+    fetchServerUsers();
+    const interval = setInterval(fetchServerUsers, 3000);
+
+    // C) Real-time Firestore Snapshot
     try {
       const unsub = onSnapshot(collection(db, 'users'), (snapshot) => {
         const list: UserProfile[] = [];
         snapshot.forEach((docSnap) => {
           list.push({ cpf: docSnap.id, ...docSnap.data() } as UserProfile);
         });
-        list.sort((a, b) => {
-          const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-          const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-          return timeB - timeA;
+
+        // Also sync snapshot users to backend
+        if (list.length > 0) {
+          fetch('/api/users/sync', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ users: list }),
+          }).catch(() => null);
+        }
+
+        setUsers((prev) => {
+          const map = new Map<string, UserProfile>();
+          prev.forEach((u) => map.set(u.cpf.replace(/\D/g, ''), u));
+          list.forEach((u) => {
+            const clean = u.cpf.replace(/\D/g, '');
+            if (clean) map.set(clean, { ...map.get(clean), ...u, cpf: clean });
+          });
+          const merged = Array.from(map.values());
+          merged.sort((a, b) => {
+            const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+            const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+            return timeB - timeA;
+          });
+          return merged;
         });
-        setUsers(list);
       });
 
-      return () => unsub();
+      return () => {
+        clearInterval(interval);
+        unsub();
+      };
     } catch (e) {
       console.warn('Users listener notice:', e);
+      return () => clearInterval(interval);
     }
   }, [isAdminAuthenticated]);
 
@@ -481,6 +587,13 @@ export default function AdminPanel({ onBackToCasino }: AdminPanelProps) {
         { merge: true }
       );
 
+      // Also notify backend
+      fetch('/api/admin/users/update-balance', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cpf: cleanCpf, amount, type }),
+      }).catch(() => null);
+
       soundEngine.playCoinDrop();
       showToast(
         `Saldo de ${user.name} atualizado: R$ ${formatBRL(currentBalance)} ➔ R$ ${formatBRL(newBalance)}`
@@ -517,6 +630,13 @@ export default function AdminPanel({ onBackToCasino }: AdminPanelProps) {
         },
         { merge: true }
       );
+
+      // Also notify backend
+      fetch('/api/admin/users/reset-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cpf: cleanCpf, newPassword: newPass }),
+      }).catch(() => null);
 
       const readyMessage = `Olá ${passwordResetModal.name}, sua nova senha de acesso ao FuturoBet é: ${newPass}\nAcesse: https://futurobet.com.br`;
       setPasswordResetSuccess(readyMessage);
@@ -640,7 +760,7 @@ export default function AdminPanel({ onBackToCasino }: AdminPanelProps) {
                   required
                   value={usernameInput}
                   onChange={(e) => setUsernameInput(e.target.value)}
-                  placeholder="copywriter"
+                  placeholder="Digite seu usuário de acesso"
                   className="w-full pl-10 pr-3.5 py-3 bg-[#13151f] border border-zinc-800 rounded-xl text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-amber-400 transition"
                 />
               </div>
@@ -659,7 +779,7 @@ export default function AdminPanel({ onBackToCasino }: AdminPanelProps) {
                   required
                   value={passwordInput}
                   onChange={(e) => setPasswordInput(e.target.value)}
-                  placeholder="••••"
+                  placeholder="Digite sua senha de acesso"
                   className="w-full pl-10 pr-10 py-3 bg-[#13151f] border border-zinc-800 rounded-xl text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-amber-400 transition"
                 />
                 <button
@@ -741,7 +861,7 @@ export default function AdminPanel({ onBackToCasino }: AdminPanelProps) {
                 <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
                 Painel Online (Tempo Real)
               </span>
-              <span className="text-[11px] text-zinc-400 font-medium">Logado como: copywriter</span>
+              <span className="text-[11px] text-zinc-400 font-medium">Sessão Segura • Administrador</span>
             </div>
           </div>
 

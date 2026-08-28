@@ -34,7 +34,21 @@ async function startServer() {
     qrCodeUrl?: string;
   }
 
+  interface RegisteredUser {
+    cpf: string;
+    name: string;
+    phone?: string;
+    passwordHash?: string;
+    balance: number;
+    balanceBonus?: number;
+    createdAt: string;
+    updatedAt: string;
+    termsAccepted?: boolean;
+    referralCode?: string;
+  }
+
   const moderatedDeposits = new Map<string, ModeratedDeposit>();
+  const registeredUsers = new Map<string, RegisteredUser>();
   let globalMaintenanceMode = false;
   let globalMaintenanceMessage = 'Sistema em Manutenção para Melhorias. Voltamos em instantes!';
 
@@ -157,6 +171,132 @@ async function startServer() {
       success: true,
       message: 'Depósito recusado.',
       deposit: dep,
+    });
+  });
+
+  // Client/Admin User Sync Endpoint (Accepts single user or array of users to sync to server)
+  app.post('/api/users/sync', (req, res) => {
+    const { user, users: usersList } = req.body || {};
+    const toProcess: RegisteredUser[] = [];
+    if (user && user.cpf) {
+      toProcess.push(user);
+    }
+    if (Array.isArray(usersList)) {
+      usersList.forEach((u) => {
+        if (u && u.cpf) toProcess.push(u);
+      });
+    }
+
+    toProcess.forEach((u) => {
+      const cleanCpf = String(u.cpf).replace(/\D/g, '');
+      if (!cleanCpf) return;
+      const existing = registeredUsers.get(cleanCpf);
+      registeredUsers.set(cleanCpf, {
+        cpf: cleanCpf,
+        name: u.name || existing?.name || 'Jogador FuturoBet',
+        phone: u.phone || existing?.phone || '',
+        passwordHash: u.passwordHash || existing?.passwordHash || '',
+        balance: typeof u.balance === 'number' ? u.balance : (existing?.balance ?? 50.00),
+        balanceBonus: typeof u.balanceBonus === 'number' ? u.balanceBonus : (existing?.balanceBonus ?? 0.00),
+        createdAt: u.createdAt || existing?.createdAt || new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        termsAccepted: u.termsAccepted ?? existing?.termsAccepted ?? true,
+        referralCode: u.referralCode || existing?.referralCode,
+      });
+    });
+
+    const all = Array.from(registeredUsers.values()).sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
+
+    return res.json({
+      success: true,
+      totalUsers: all.length,
+      users: all,
+    });
+  });
+
+  // Admin Get All Users
+  app.get('/api/admin/users', (req, res) => {
+    const all = Array.from(registeredUsers.values()).sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
+    return res.json({
+      success: true,
+      users: all,
+      totalCount: all.length,
+    });
+  });
+
+  // Admin Update User Balance
+  app.post('/api/admin/users/update-balance', (req, res) => {
+    const { cpf, amount, type } = req.body || {};
+    const cleanCpf = String(cpf || '').replace(/\D/g, '');
+    if (!cleanCpf) {
+      return res.status(400).json({ success: false, error: 'CPF do jogador inválido.' });
+    }
+
+    const numAmount = Number(amount);
+    if (isNaN(numAmount) || numAmount <= 0) {
+      return res.status(400).json({ success: false, error: 'Valor inválido.' });
+    }
+
+    let user = registeredUsers.get(cleanCpf);
+    if (!user) {
+      user = {
+        cpf: cleanCpf,
+        name: 'Jogador FuturoBet',
+        balance: 50.00,
+        balanceBonus: 0.00,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+    }
+
+    if (type === 'add') {
+      user.balance = parseFloat((user.balance + numAmount).toFixed(2));
+    } else if (type === 'subtract') {
+      user.balance = parseFloat((Math.max(0, user.balance - numAmount)).toFixed(2));
+    }
+
+    user.updatedAt = new Date().toISOString();
+    registeredUsers.set(cleanCpf, user);
+
+    return res.json({
+      success: true,
+      message: `Saldo atualizado para R$ ${user.balance.toFixed(2)}`,
+      user,
+    });
+  });
+
+  // Admin Reset User Password
+  app.post('/api/admin/users/reset-password', (req, res) => {
+    const { cpf, newPassword } = req.body || {};
+    const cleanCpf = String(cpf || '').replace(/\D/g, '');
+    if (!cleanCpf || !newPassword) {
+      return res.status(400).json({ success: false, error: 'CPF e nova senha são obrigatórios.' });
+    }
+
+    let user = registeredUsers.get(cleanCpf);
+    if (!user) {
+      user = {
+        cpf: cleanCpf,
+        name: 'Jogador FuturoBet',
+        balance: 50.00,
+        balanceBonus: 0.00,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+    }
+
+    user.passwordHash = String(newPassword).trim();
+    user.updatedAt = new Date().toISOString();
+    registeredUsers.set(cleanCpf, user);
+
+    return res.json({
+      success: true,
+      message: 'Senha do jogador redefinida com sucesso!',
+      user,
     });
   });
 

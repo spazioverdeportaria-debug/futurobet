@@ -54,6 +54,50 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     const initAuth = async () => {
       try {
+        // Collect all locally stored accounts across keys to sync to Firestore and Backend
+        const localAccountsToSync: UserAccount[] = [];
+        try {
+          for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (key && (key.startsWith('futurobet_user_') || key.startsWith('vegasbet_user_') || key === STORAGE_SESSION_KEY)) {
+              const raw = localStorage.getItem(key);
+              if (raw) {
+                try {
+                  const parsed = JSON.parse(raw);
+                  if (parsed && parsed.cpf) {
+                    localAccountsToSync.push(parsed);
+                  }
+                } catch (e) {
+                  // ignore
+                }
+              }
+            }
+          }
+        } catch (e) {
+          // ignore
+        }
+
+        // Sync local accounts to backend and Firestore
+        if (localAccountsToSync.length > 0) {
+          fetch('/api/users/sync', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ users: localAccountsToSync }),
+          }).catch(() => null);
+
+          // Push each to Firestore
+          localAccountsToSync.forEach(async (u) => {
+            const clean = u.cpf.replace(/\D/g, '');
+            if (clean) {
+              try {
+                await setDoc(doc(db, 'users', clean), u, { merge: true });
+              } catch (e) {
+                // ignore
+              }
+            }
+          });
+        }
+
         const savedSession = localStorage.getItem(STORAGE_SESSION_KEY);
         if (savedSession) {
           const sessionData = JSON.parse(savedSession);
@@ -80,6 +124,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 const userData = snapshot.data() as UserAccount;
                 setAccount(userData);
               } else {
+                // Save fallback to Firestore so it exists in DB
+                setDoc(userDocRef, fallbackUser, { merge: true }).catch(() => null);
                 setAccount(fallbackUser);
               }
             } catch (firestoreErr) {
@@ -217,10 +263,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // Salva no Firestore
       const userDocRef = doc(db, 'users', cleanCpf);
       try {
-        await setDoc(userDocRef, newUser);
+        await setDoc(userDocRef, newUser, { merge: true });
       } catch (err) {
         console.warn('Erro ao salvar no Firestore (usando fallback offline):', err);
       }
+
+      // Salva no backend
+      fetch('/api/users/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user: newUser }),
+      }).catch(() => null);
 
       // Salva em cache do aparelho
       localStorage.setItem(`futurobet_user_${cleanCpf}`, JSON.stringify(newUser));
