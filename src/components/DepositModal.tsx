@@ -107,39 +107,65 @@ export default function DepositModal({ isOpen, onClose, onSuccessDeposit }: Depo
     setErrorMessage(null);
   };
 
-  // Helper to calculate CRC16 for standard Banco Central PIX
-  const calculateCRC16 = (payload: string): string => {
-    let crc = 0xFFFF;
-    for (let i = 0; i < payload.length; i++) {
-      crc ^= payload.charCodeAt(i) << 8;
-      for (let j = 0; j < 8; j++) {
-        if ((crc & 0x8000) !== 0) {
-          crc = ((crc << 1) ^ 0x1021) & 0xFFFF;
-        } else {
-          crc = (crc << 1) & 0xFFFF;
-        }
-      }
-    }
-    return crc.toString(16).toUpperCase().padStart(4, '0');
-  };
+  // Real SyncPayments Cash-In Direct Fallback in case of proxy issues
+  const requestDirectSyncPaymentsCashIn = async (amount: number, name: string, cpf: string): Promise<SyncPayPixData | null> => {
+    try {
+      const authRes = await fetch('https://api.syncpayments.com.br/api/partner/v1/auth-token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        body: JSON.stringify({
+          client_id: '36adf56b-e3f6-4319-b10b-e1347e62eafd',
+          client_secret: '8240be3d-2c32-4f78-8e71-6a2d0d523abc',
+        }),
+      });
 
-  const generateLocalPixPayload = (amount: number): SyncPayPixData => {
-    const formattedAmount = amount.toFixed(2);
-    const rawPayload = `00020126580014br.gov.bcb.pix013636adf56b-e3f6-4319-b10b-e1347e62eafd520400005303986540${formattedAmount.length}${formattedAmount}5802BR5919SYNC TICKET BR LTDA6009SAO PAULO62070503***6304`;
-    const crc = calculateCRC16(rawPayload);
-    const pixCode = `${rawPayload}${crc}`;
-    const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&margin=10&data=${encodeURIComponent(pixCode)}`;
-    const txId = `SYNC_${Date.now()}`;
-    return {
-      transactionId: txId,
-      amount,
-      pixCode,
-      qrCodeUrl,
-      expiresAt: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
-      isSimulated: false,
-      status: 'PENDING',
-      gatewayMessage: 'PIX oficial gerado via SyncPay',
-    };
+      if (!authRes.ok) return null;
+      const authData = await authRes.json();
+      const token = authData.access_token || authData.token;
+      if (!token) return null;
+
+      const cleanCpf = (cpf || '12345678909').replace(/\D/g, '') || '12345678909';
+      const cleanName = (name || 'Jogador FuturoBet').trim();
+
+      const cashInRes = await fetch('https://api.syncpayments.com.br/api/partner/v1/cash-in', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/json',
+        },
+        body: JSON.stringify({
+          amount: Number(amount.toFixed(2)),
+          description: `Deposito FuturoBet R$ ${amount.toFixed(2)}`,
+          client: {
+            name: cleanName,
+            cpf: cleanCpf,
+            email: 'cliente@futurobet.com',
+          },
+        }),
+      });
+
+      if (!cashInRes.ok) return null;
+      const cashInData = await cashInRes.json();
+      const pixCode = cashInData.pix_code || cashInData.qrcode || cashInData.emv || cashInData.data?.pix_code;
+      const identifier = cashInData.identifier || cashInData.id || `SYNC_${Date.now()}`;
+
+      if (pixCode) {
+        return {
+          transactionId: identifier,
+          amount,
+          pixCode,
+          qrCodeUrl: `https://api.qrserver.com/v1/create-qr-code/?size=300x300&margin=10&data=${encodeURIComponent(pixCode)}`,
+          expiresAt: cashInData.expires_at || new Date(Date.now() + 30 * 60 * 1000).toISOString(),
+          isSimulated: false,
+          status: 'PENDING',
+          gatewayMessage: 'PIX oficial gerado via SyncPayments',
+        };
+      }
+    } catch (e) {
+      console.warn('Direct SyncPayments call error:', e);
+    }
+    return null;
   };
 
   const handleGeneratePix = async () => {
@@ -164,6 +190,7 @@ export default function DepositModal({ isOpen, onClose, onSuccessDeposit }: Depo
     try {
       let createdData: SyncPayPixData | null = null;
 
+      // 1. First try serverless / API endpoint
       try {
         const response = await fetch('/api/syncpay/deposit', {
           method: 'POST',
@@ -183,24 +210,29 @@ export default function DepositModal({ isOpen, onClose, onSuccessDeposit }: Depo
           }
         }
       } catch (networkErr) {
-        console.warn('Network call to backend deposit had a glitch, using high-res fallback:', networkErr);
+        console.warn('API endpoint call had an issue:', networkErr);
       }
 
-      // If backend was cold or didn't return pixCode, use local guaranteed standard PIX
+      // 2. Fallback to direct SyncPayments Partner API
       if (!createdData) {
-        createdData = generateLocalPixPayload(finalAmount);
+        createdData = await requestDirectSyncPaymentsCashIn(
+          finalAmount,
+          clientName || 'Jogador FuturoBet',
+          clientCpf || '12345678909'
+        );
       }
 
-      setPixData(createdData);
-      setShowPixScreen(true);
-      setTimeLeft(900);
+      if (createdData && createdData.pixCode) {
+        setPixData(createdData);
+        setShowPixScreen(true);
+        setTimeLeft(900);
+      } else {
+        throw new Error('Não foi possível gerar a cobrança PIX no momento. Tente novamente em instantes.');
+      }
     } catch (err: any) {
-      console.warn('Erro ao gerar PIX:', err);
-      // Even in the worst edge case, generate the PIX so the user is never blocked
-      const fallback = generateLocalPixPayload(finalAmount);
-      setPixData(fallback);
-      setShowPixScreen(true);
-      setTimeLeft(900);
+      console.error('Erro ao gerar PIX:', err);
+      setErrorMessage(err.message || 'Erro ao comunicar com o gateway de pagamento. Tente novamente.');
+      soundEngine.playLockedSound();
     } finally {
       setIsProcessing(false);
     }

@@ -204,31 +204,8 @@ export async function createSyncPayPixDeposit(req: SyncPayDepositRequest): Promi
     console.error('[SyncPay Cash-In Error]:', err);
   }
 
-  // 2. Fallback EMV payload if remote gateway is unreachable
-  const txIdentifier = `SYNC_${Date.now()}`;
-  const rawFallbackPayload = `00020126580014br.gov.bcb.pix013636adf56b-e3f6-4319-b10b-e1347e62eafd520400005303986540${req.amount.toFixed(2).length}${req.amount.toFixed(2)}5802BR5919SYNC TICKET BR LTDA6009SAO PAULO62070503***6304`;
-  const checksum = calculateCRC16(rawFallbackPayload);
-  const pixCode = `${rawFallbackPayload}${checksum}`;
-  const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&margin=10&data=${encodeURIComponent(pixCode)}`;
-
-  pendingTransactions.set(txId, {
-    amount: req.amount,
-    status: 'PENDING',
-    createdAt: new Date().toISOString(),
-    clientName: req.clientName,
-  });
-
-  return {
-    success: true,
-    transactionId: txId,
-    amount: req.amount,
-    pixCode,
-    qrCodeUrl,
-    expiresAt,
-    isSimulated: false,
-    status: 'PENDING',
-    gatewayMessage: 'PIX gerado com sucesso via SyncPay',
-  };
+  // 2. If API fails, throw informative error so the client knows
+  throw new Error('Falha ao registrar cobrança PIX na API da SyncPayments. Verifique suas credenciais.');
 }
 
 /**

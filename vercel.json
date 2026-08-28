@@ -5,6 +5,18 @@
       "destination": "/api/football/matches"
     },
     {
+      "source": "/api/syncpay/deposit",
+      "destination": "/api/syncpay/deposit"
+    },
+    {
+      "source": "/api/syncpay/check-pix/:id",
+      "destination": "/api/syncpay/check-pix?id=:id"
+    },
+    {
+      "source": "/api/syncpay/check-pix",
+      "destination": "/api/syncpay/check-pix"
+    },
+    {
       "source": "/((?!api/.*).*)",
       "destination": "/index.html"
     }
