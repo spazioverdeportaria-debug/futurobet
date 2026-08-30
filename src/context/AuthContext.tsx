@@ -193,9 +193,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           return { success: false, message: 'Senha incorreta. Tente novamente.' };
         }
 
-        setAccount(userData);
+        const updatedUser = {
+          ...userData,
+          updatedAt: new Date().toISOString(),
+        };
+
+        // Update Firestore & Backend
+        setDoc(userDocRef, { updatedAt: new Date().toISOString() }, { merge: true }).catch(() => null);
+        fetch('/api/users/sync', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ user: updatedUser }),
+        }).catch(() => null);
+
+        setAccount(updatedUser);
         if (remember) {
-          localStorage.setItem(STORAGE_SESSION_KEY, JSON.stringify(userData));
+          localStorage.setItem(STORAGE_SESSION_KEY, JSON.stringify(updatedUser));
         }
         return { success: true };
       } else {
@@ -206,6 +219,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           if (localUser.passwordHash && localUser.passwordHash !== passwordInput) {
             return { success: false, message: 'Senha incorreta. Tente novamente.' };
           }
+
+          // Push to Firestore & Backend so Admin sees them immediately
+          setDoc(userDocRef, localUser, { merge: true }).catch(() => null);
+          fetch('/api/users/sync', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ user: localUser }),
+          }).catch(() => null);
+
           setAccount(localUser);
           if (remember) {
             localStorage.setItem(STORAGE_SESSION_KEY, JSON.stringify(localUser));

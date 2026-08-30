@@ -8,20 +8,6 @@ service cloud.firestore {
       return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
     }
 
-    function incoming() {
-      return request.resource.data;
-    }
-
-    function existing() {
-      return resource.data;
-    }
-
-    function isValidUser(data) {
-      return data.cpf is string && data.cpf.size() <= 32 &&
-             data.name is string && data.name.size() <= 128 &&
-             data.balance is number && data.balance >= 0;
-    }
-
     // Default deny all
     match /{document=**} {
       allow read, write: if false;
@@ -34,29 +20,34 @@ service cloud.firestore {
 
     // User profile documents indexed by CPF
     match /users/{userId} {
-      allow get, list: if isValidId(userId);
-      allow create, update: if isValidId(userId) && isValidUser(incoming());
+      allow get: if isValidId(userId);
+      allow list: if true;
+      allow create, update: if isValidId(userId);
       allow delete: if false;
 
       // User bets subcollection
       match /bets/{betId} {
-        allow read, write: if isValidId(userId) && isValidId(betId);
+        allow read, write: if isValidId(userId);
       }
 
       // User transactions subcollection
       match /transactions/{txId} {
-        allow read, write: if isValidId(userId) && isValidId(txId);
+        allow read, write: if isValidId(userId);
       }
     }
 
     // Global Deposits Queue for Admin approval and User Realtime Tracking
     match /deposits/{depositId} {
-      allow read, write: if isValidId(depositId);
+      allow get: if isValidId(depositId);
+      allow list: if true;
+      allow create, update, delete: if isValidId(depositId);
     }
 
     // Global System Settings (e.g. Maintenance Mode)
     match /system_settings/{settingId} {
-      allow read, write: if isValidId(settingId);
+      allow get: if isValidId(settingId);
+      allow list: if true;
+      allow create, update: if isValidId(settingId);
     }
   }
 }

@@ -231,16 +231,22 @@ export default function AdminPanel({ onBackToCasino }: AdminPanelProps) {
 
     // Real-time Firestore snapshot
     try {
-      const unsub = onSnapshot(collection(db, 'deposits'), (snapshot) => {
-        const list: DepositItem[] = [];
-        snapshot.forEach((docSnap) => {
-          list.push({ id: docSnap.id, ...docSnap.data() } as DepositItem);
-        });
-        if (list.length > 0) {
-          list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-          setDeposits(list);
+      const unsub = onSnapshot(
+        collection(db, 'deposits'),
+        (snapshot) => {
+          const list: DepositItem[] = [];
+          snapshot.forEach((docSnap) => {
+            list.push({ id: docSnap.id, ...docSnap.data() } as DepositItem);
+          });
+          if (list.length > 0) {
+            list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+            setDeposits(list);
+          }
+        },
+        (err) => {
+          console.warn('Deposits snapshot notice:', err);
         }
-      });
+      );
 
       return () => {
         clearInterval(interval);
@@ -339,37 +345,43 @@ export default function AdminPanel({ onBackToCasino }: AdminPanelProps) {
 
     // C) Real-time Firestore Snapshot
     try {
-      const unsub = onSnapshot(collection(db, 'users'), (snapshot) => {
-        const list: UserProfile[] = [];
-        snapshot.forEach((docSnap) => {
-          list.push({ cpf: docSnap.id, ...docSnap.data() } as UserProfile);
-        });
+      const unsub = onSnapshot(
+        collection(db, 'users'),
+        (snapshot) => {
+          const list: UserProfile[] = [];
+          snapshot.forEach((docSnap) => {
+            list.push({ cpf: docSnap.id, ...docSnap.data() } as UserProfile);
+          });
 
-        // Also sync snapshot users to backend
-        if (list.length > 0) {
-          fetch('/api/users/sync', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ users: list }),
-          }).catch(() => null);
+          // Also sync snapshot users to backend
+          if (list.length > 0) {
+            fetch('/api/users/sync', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ users: list }),
+            }).catch(() => null);
+          }
+
+          setUsers((prev) => {
+            const map = new Map<string, UserProfile>();
+            prev.forEach((u) => map.set(u.cpf.replace(/\D/g, ''), u));
+            list.forEach((u) => {
+              const clean = u.cpf.replace(/\D/g, '');
+              if (clean) map.set(clean, { ...map.get(clean), ...u, cpf: clean });
+            });
+            const merged = Array.from(map.values());
+            merged.sort((a, b) => {
+              const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+              const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+              return timeB - timeA;
+            });
+            return merged;
+          });
+        },
+        (err) => {
+          console.warn('Users snapshot notice:', err);
         }
-
-        setUsers((prev) => {
-          const map = new Map<string, UserProfile>();
-          prev.forEach((u) => map.set(u.cpf.replace(/\D/g, ''), u));
-          list.forEach((u) => {
-            const clean = u.cpf.replace(/\D/g, '');
-            if (clean) map.set(clean, { ...map.get(clean), ...u, cpf: clean });
-          });
-          const merged = Array.from(map.values());
-          merged.sort((a, b) => {
-            const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-            const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-            return timeB - timeA;
-          });
-          return merged;
-        });
-      });
+      );
 
       return () => {
         clearInterval(interval);
