@@ -16,6 +16,7 @@ import PromotionsSection from './components/PromotionsSection';
 import DailyPrizeWheel from './components/DailyPrizeWheel';
 import AuthModal from './components/AuthModal';
 import UserProfileModal from './components/UserProfileModal';
+import FloatingBonusPrompt from './components/FloatingBonusPrompt';
 import AdminPanel from './components/AdminPanel';
 import MaintenanceScreen from './components/MaintenanceScreen';
 import { AuthProvider, useAuth } from './context/AuthContext';
@@ -110,6 +111,7 @@ function FuturoBetContent() {
   const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
   const [authModalMode, setAuthModalMode] = useState<'login' | 'register'>('register');
   const [authActionName, setAuthActionName] = useState<string | undefined>(undefined);
+  const [showFloatingBonusPrompt, setShowFloatingBonusPrompt] = useState<boolean>(false);
 
   const [depositBonusAlert, setDepositBonusAlert] = useState<{
     deposited: number;
@@ -155,21 +157,23 @@ function FuturoBetContent() {
     return () => window.removeEventListener('popstate', handlePopState);
   }, [selectedGame, isProfileOpen, isCashierOpen, isDepositOpen, isWheelOpen, isAuthModalOpen]);
 
-  // 🛡️ POP-UP AUTOMÁTICO APÓS 5 SEGUNDOS (Se o usuário não estiver logado)
+  // 🎁 POP-UP COMPACTO DE BÔNUS 100% (Permanece ativo até a pessoa realizar o login/cadastro)
   useEffect(() => {
-    if (isLoggedIn) return;
+    if (isLoggedIn) {
+      setShowFloatingBonusPrompt(false);
+      return;
+    }
 
-    const timer = setTimeout(() => {
-      // Abre o modal após 5 segundos se o usuário ainda não estiver logado
-      if (!isLoggedIn) {
-        setAuthModalMode('register');
-        setAuthActionName(undefined);
-        setIsAuthModalOpen(true);
-      }
-    }, 5000);
-
-    return () => clearTimeout(timer);
-  }, [isLoggedIn]);
+    // Se o usuário não estiver logado, garante que o pop-up apareça
+    if (!showFloatingBonusPrompt && !isAuthModalOpen && !selectedGame) {
+      const timer = setTimeout(() => {
+        if (!isLoggedIn) {
+          setShowFloatingBonusPrompt(true);
+        }
+      }, 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [isLoggedIn, showFloatingBonusPrompt, isAuthModalOpen, selectedGame]);
 
   // Sync account balance from Firestore / AuthContext, else use local state
   const balance = account ? account.balance : localBalance;
@@ -244,15 +248,8 @@ function FuturoBetContent() {
     });
   };
 
-  // Mudar de aba com trava caso tente esportes
+  // Mudar de aba livremente para navegação do usuário
   const handleTabChange = (tab: NavTab) => {
-    if (tab === 'futebol') {
-      requireAuth('acessar apostas esportivas', () => {
-        setCurrentTab(tab);
-        window.scrollTo({ top: 0, behavior: 'instant' });
-      });
-      return;
-    }
     setCurrentTab(tab);
     window.scrollTo({ top: 0, behavior: 'instant' });
   };
@@ -397,6 +394,8 @@ function FuturoBetContent() {
               balance={balance}
               onUpdateBalance={(newBal) => handleUpdateBalance(newBal)}
               onOpenDeposit={handleOpenDeposit}
+              isLoggedIn={isLoggedIn}
+              onRequireAuth={(action) => requireAuth(action, () => {})}
             />
           )}
 
@@ -576,6 +575,18 @@ function FuturoBetContent() {
             </div>
           </div>
         )}
+
+        {/* POP-UP COMPACTO FLUTUANTE: 100% BÔNUS PARA CADASTRO */}
+        <FloatingBonusPrompt
+          isOpen={showFloatingBonusPrompt && !isLoggedIn && !isAuthModalOpen && !selectedGame}
+          onClaim={() => {
+            setShowFloatingBonusPrompt(false);
+            setAuthModalMode('register');
+            setAuthActionName('resgatar 100% de bônus no 1º depósito');
+            setIsAuthModalOpen(true);
+          }}
+          onClose={() => setShowFloatingBonusPrompt(false)}
+        />
 
       </div>
     </div>

@@ -94,6 +94,8 @@ interface SportsBettingProps {
   balance: number;
   onUpdateBalance: (newBalance: number) => void;
   onOpenDeposit: () => void;
+  isLoggedIn?: boolean;
+  onRequireAuth?: (actionName: string) => void;
 }
 
 // STORAGE KEY FOR PLACED BETS
@@ -178,7 +180,13 @@ function SportsSkeleton() {
   );
 }
 
-export default function SportsBetting({ balance, onUpdateBalance, onOpenDeposit }: SportsBettingProps) {
+export default function SportsBetting({ 
+  balance, 
+  onUpdateBalance, 
+  onOpenDeposit,
+  isLoggedIn = false,
+  onRequireAuth
+}: SportsBettingProps) {
   // Active sport category: Futebol ⚽ | Basquete 🏀 | UFC / MMA 🥊
   const [activeSport, setActiveSport] = useState<SportType>('SOCCER');
 
@@ -615,6 +623,16 @@ export default function SportsBetting({ balance, onUpdateBalance, onOpenDeposit 
   const handlePlaceBet = () => {
     if (selectedBets.length === 0) return;
     if (numStake <= 0) return;
+
+    // Se não estiver logado, pede cadastro/login
+    if (!isLoggedIn) {
+      if (onRequireAuth) {
+        onRequireAuth('confirmar sua aposta esportiva');
+      } else {
+        onOpenDeposit();
+      }
+      return;
+    }
 
     // Strict balance check: prompt user to deposit if insufficient
     if (numStake > balance) {
