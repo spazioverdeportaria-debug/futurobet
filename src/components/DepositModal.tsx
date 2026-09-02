@@ -77,6 +77,16 @@ export default function DepositModal({ isOpen, onClose, onSuccessDeposit }: Depo
             setIsWaitingAdminApproval(false);
             setIsPaymentConfirmed(true);
             soundEngine.playWinChime();
+
+            // Dispara evento Purchase no Meta Pixel
+            if (typeof window !== 'undefined' && (window as any).fbq) {
+              (window as any).fbq('track', 'Purchase', {
+                value: finalAmount,
+                currency: 'BRL',
+                content_name: 'Depósito PIX FuturoBet',
+              });
+            }
+
             onSuccessDeposit(totalCredited);
           } else if (data.status === 'PAID_PENDING_APPROVAL') {
             setIsWaitingAdminApproval(true);
@@ -267,6 +277,15 @@ export default function DepositModal({ isOpen, onClose, onSuccessDeposit }: Depo
         setPixData(createdData);
         setShowPixScreen(true);
         setTimeLeft(900);
+
+        // Dispara evento InitiateCheckout no Meta Pixel
+        if (typeof window !== 'undefined' && (window as any).fbq) {
+          (window as any).fbq('track', 'InitiateCheckout', {
+            value: finalAmount,
+            currency: 'BRL',
+            content_name: 'Gerar PIX Depósito',
+          });
+        }
 
         // Store into Firestore for real-time admin queue sync
         try {

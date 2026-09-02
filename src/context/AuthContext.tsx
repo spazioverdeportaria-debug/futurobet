@@ -302,6 +302,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       localStorage.setItem(STORAGE_SESSION_KEY, JSON.stringify(newUser));
       setAccount(newUser);
 
+      // Dispara evento no Meta Pixel
+      if (typeof window !== 'undefined' && (window as any).fbq) {
+        (window as any).fbq('track', 'CompleteRegistration', {
+          content_name: 'Cadastro FuturoBet',
+          status: true,
+        });
+      }
+
       return { success: true };
     } catch (err: any) {
       return { success: false, message: err?.message || 'Erro ao realizar cadastro.' };

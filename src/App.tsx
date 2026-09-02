@@ -222,6 +222,12 @@ function FuturoBetContent() {
   const handleSelectGame = (gameName: string) => {
     requireAuth('jogar no cassino', () => {
       setSelectedGame(gameName);
+      if (typeof window !== 'undefined' && (window as any).fbq) {
+        (window as any).fbq('track', 'ViewContent', {
+          content_name: gameName,
+          content_category: 'Cassino',
+        });
+      }
     });
   };
 
@@ -252,6 +258,12 @@ function FuturoBetContent() {
   const handleTabChange = (tab: NavTab) => {
     setCurrentTab(tab);
     window.scrollTo({ top: 0, behavior: 'instant' });
+    if (typeof window !== 'undefined' && (window as any).fbq) {
+      (window as any).fbq('track', 'ViewContent', {
+        content_name: `Aba ${tab.toUpperCase()}`,
+        content_category: 'Navegação',
+      });
+    }
   };
 
   // 🛡️ 1. Render Admin Panel if on /admin route
