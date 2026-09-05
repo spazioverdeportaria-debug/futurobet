@@ -57,7 +57,7 @@ export default function FortuneOxGame({
   );
 
   const rawUrl = catalogGame?.demoUrl || 
-    'https://demogamesfree.pragmaticplay.net/gs2c/openGame.do?gameSymbol=vs20sweetbonanza&lang=pt&cur=BRL';
+    'https://demogamesfree.pragmaticplay.net/gs2c/openGame.do?gameSymbol=vs20olympgate&lang=pt&cur=BRL';
 
   const gameUrl = rawUrl;
 

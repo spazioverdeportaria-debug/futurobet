@@ -1,3 +1,12 @@
+import goldenRetrieverImg from '../assets/images/golden_retriever_slot_1788618982056.jpg';
+import harvestMoonImg from '../assets/images/harvest_moon_slot_1788619009752.jpg';
+import wheelBlitzImg from '../assets/images/wheel_blitz_slot_1788619037026.jpg';
+import superSergeImg from '../assets/images/super_serge_slot_1788619055268.jpg';
+import jadeLegendsImg from '../assets/images/jade_legends_slot_1788619067857.jpg';
+import deathDominionImg from '../assets/images/death_dominion_slot_1788619080433.jpg';
+import sunnydazeAsylumImg from '../assets/images/sunnydaze_asylum_slot_1788619094689.jpg';
+import sleepingDragonImg from '../assets/images/sleeping_dragon_slot_1788619111222.jpg';
+
 export interface GameConfig {
   id: string;
   name: string;
@@ -56,10 +65,10 @@ export const HERO_BANNERS: BannerConfig[] = [
   {
     id: 'bonanza-bonus',
     title: 'MINUTOS PAGANTES ATIVADOS',
-    subtitle: 'Sweet Bonanza 1000 com multiplicador de até 21.100x!',
+    subtitle: 'Sugar Rush 1000 com multiplicador de até 25.000x!',
     image: 'https://i.pinimg.com/1200x/49/b5/94/49b594c29ef556b15a94f46369ae1e46.jpg',
-    gameId: 'sweet-bonanza',
-    ctaText: 'JOGAR 🍭',
+    gameId: 'sugar-rush',
+    ctaText: 'JOGAR 🍬',
     badge: '🔥 PAGANDO MUITO',
     actionType: 'game',
   },
@@ -98,7 +107,7 @@ export const PROMOTIONS: PromotionConfig[] = [
   {
     id: 'free-spins',
     title: '50 Giros Grátis',
-    subtitle: 'Válido para Gates of Olympus e Sweet Bonanza',
+    subtitle: 'Válido para Gates of Olympus e Sugar Rush',
     tag: 'EXCLUSIVO',
     color: 'from-yellow-400 to-amber-600',
     code: 'GIROS50',
@@ -117,9 +126,9 @@ export const PROMOTIONS: PromotionConfig[] = [
 
 export const LIVE_WINNERS: LiveWinner[] = [
   { id: '1', user: 'Lucas M.***', amount: 'R$ 3.840,00', game: 'Gates of Olympus', icon: '🏛️', time: 'Agora' },
-  { id: '2', user: 'Ana P.***', amount: 'R$ 1.250,50', game: 'Sweet Bonanza 1000', icon: '🍭', time: '1m atrás' },
+  { id: '2', user: 'Ana P.***', amount: 'R$ 1.250,50', game: 'Sugar Rush 1000', icon: '🍬', time: '1m atrás' },
   { id: '3', user: 'Gabriel S.***', amount: 'R$ 8.900,00', game: 'Aviator', icon: '✈️', time: '2m atrás' },
-  { id: '4', user: 'Carla R.***', amount: 'R$ 500,00', game: 'Sugar Rush 1000', icon: '🍬', time: '3m atrás' },
+  { id: '4', user: 'Carla R.***', amount: 'R$ 500,00', game: 'Fortune Tiger', icon: '🐯', time: '3m atrás' },
   { id: '5', user: 'Felipe C.***', amount: 'R$ 12.450,00', game: 'Starlight Princess 1000', icon: '✨', time: '5m atrás' },
 ];
 
@@ -203,19 +212,6 @@ export const GAMES_CATALOG: GameConfig[] = [
     demoUrl: 'https://demogamesfree.pragmaticplay.net/gs2c/openGame.do?gameSymbol=vs10bbbonanza&lang=pt&cur=BRL',
   },
   {
-    id: 'goal',
-    name: 'Goal',
-    provider: 'SPRIBE',
-    category: 'Popular',
-    multiplier: 'x9000',
-    rtp: '97.00%',
-    icon: '⚽',
-    bgImage: 'https://imagecache.365scores.com/image/fetch/f_jpg,c_fill,q_auto:eco,dpr_2/https%3A%2F%2Fimagecache.365scores.com%2Fimage%2Fupload%2Ff_png%2Cc_limit%2Cq_auto%3Aeco%2Fv1774389978%2FWebSite%2FBettingZone%2FWordpress%2Fodds.png%3F_i%3DAA',
-    badge: 'NOVO',
-    accentColor: '#3b82f6',
-    demoUrl: 'https://demo.spribe.io/launch/goal?currency=BRL&lang=pt',
-  },
-  {
     id: 'fruit-party',
     name: 'Fruit Party',
     provider: 'PRAGMATIC PLAY',
@@ -255,19 +251,6 @@ export const GAMES_CATALOG: GameConfig[] = [
     demoUrl: 'https://demogamesfree.pragmaticplay.net/gs2c/openGame.do?gameSymbol=vs25wolfgold&lang=pt&cur=BRL',
   },
   {
-    id: 'sweet-bonanza',
-    name: 'Sweet Bonanza 1000',
-    provider: 'PRAGMATIC PLAY',
-    category: 'Slots',
-    multiplier: 'x21100',
-    rtp: '96.48%',
-    icon: '🍭',
-    bgImage: 'https://www.segs.com.br/media/k2/items/cache/abb4a514c067bb67ed4e552f8f109c6f_XL.jpg',
-    badge: 'HOT',
-    accentColor: '#ec4899',
-    demoUrl: 'https://demogamesfree.pragmaticplay.net/gs2c/openGame.do?gameSymbol=vs20fruitsw&lang=pt&cur=BRL',
-  },
-  {
     id: 'aviator',
     name: 'Aviator',
     provider: 'SPRIBE',
@@ -279,6 +262,110 @@ export const GAMES_CATALOG: GameConfig[] = [
     badge: 'HOT',
     accentColor: '#ef4444',
     demoUrl: 'https://demo.spribe.io/launch/aviator?currency=BRL&lang=pt',
+  },
+  {
+    id: 'golden-retriever',
+    name: 'Golden Retriever',
+    provider: 'PRAGMATIC PLAY',
+    category: 'Slots',
+    multiplier: 'x5000',
+    rtp: '96.52%',
+    icon: '🐕',
+    bgImage: goldenRetrieverImg,
+    badge: 'NOVO',
+    accentColor: '#eab308',
+    demoUrl: 'https://demogamesfree.pragmaticplay.net/gs2c/openGame.do?gameSymbol=vs10gretriever&lang=pt&cur=BRL',
+  },
+  {
+    id: 'harvest-moon',
+    name: 'Harvest Moon – Grave Profits',
+    provider: 'PRAGMATIC PLAY',
+    category: 'Slots',
+    multiplier: 'x10000',
+    rtp: '96.50%',
+    icon: '👽',
+    bgImage: harvestMoonImg,
+    badge: 'NOVO',
+    accentColor: '#8b5cf6',
+    demoUrl: 'https://demogamesfree.pragmaticplay.net/gs2c/openGame.do?gameSymbol=vs15harvestm&lang=pt&cur=BRL',
+  },
+  {
+    id: '777-wheel-blitz',
+    name: '777 Wheel Blitz',
+    provider: 'PRAGMATIC PLAY',
+    category: 'Slots',
+    multiplier: 'x5020',
+    rtp: '96.50%',
+    icon: '🎰',
+    bgImage: wheelBlitzImg,
+    badge: 'HOT',
+    accentColor: '#3b82f6',
+    demoUrl: 'https://demogamesfree.pragmaticplay.net/gs2c/openGame.do?gameSymbol=vs5wheelblitz&lang=pt&cur=BRL',
+  },
+  {
+    id: 'super-serge',
+    name: 'Super Serge',
+    provider: 'PRAGMATIC PLAY',
+    category: 'Slots',
+    multiplier: 'x10000',
+    rtp: '96.50%',
+    icon: '⚡',
+    bgImage: superSergeImg,
+    badge: 'TURBO',
+    accentColor: '#f59e0b',
+    demoUrl: 'https://demogamesfree.pragmaticplay.net/gs2c/openGame.do?gameSymbol=vswaysserge&lang=pt&cur=BRL',
+  },
+  {
+    id: 'jade-legends',
+    name: 'Jade Legends',
+    provider: 'PRAGMATIC PLAY',
+    category: 'Slots',
+    multiplier: 'x5000',
+    rtp: '96.50%',
+    icon: '🐉',
+    bgImage: jadeLegendsImg,
+    badge: 'NOVO',
+    accentColor: '#10b981',
+    demoUrl: 'https://demogamesfree.pragmaticplay.net/gs2c/openGame.do?gameSymbol=vs20jadeleg&lang=pt&cur=BRL',
+  },
+  {
+    id: 'death-dominion',
+    name: 'Death Dominion',
+    provider: 'PRAGMATIC PLAY',
+    category: 'Slots',
+    multiplier: 'x20000',
+    rtp: '96.54%',
+    icon: '💀',
+    bgImage: deathDominionImg,
+    badge: 'HOT',
+    accentColor: '#6366f1',
+    demoUrl: 'https://demogamesfree.pragmaticplay.net/gs2c/openGame.do?gameSymbol=vs20deathdom&lang=pt&cur=BRL',
+  },
+  {
+    id: 'sunnydaze-asylum',
+    name: 'Sunnydaze Asylum',
+    provider: 'PRAGMATIC PLAY',
+    category: 'Slots',
+    multiplier: 'x10000',
+    rtp: '96.53%',
+    icon: '⚡',
+    bgImage: sunnydazeAsylumImg,
+    badge: 'TURBO',
+    accentColor: '#ec4899',
+    demoUrl: 'https://demogamesfree.pragmaticplay.net/gs2c/openGame.do?gameSymbol=vswayssunny&lang=pt&cur=BRL',
+  },
+  {
+    id: 'sleeping-dragon-ultra-dark',
+    name: 'Sleeping Dragon Ultra Dark',
+    provider: 'PRAGMATIC PLAY',
+    category: 'Slots',
+    multiplier: 'x20000',
+    rtp: '96.50%',
+    icon: '🐲',
+    bgImage: sleepingDragonImg,
+    badge: 'HOT',
+    accentColor: '#eab308',
+    demoUrl: 'https://demogamesfree.pragmaticplay.net/gs2c/openGame.do?gameSymbol=vs10sleepdrag&lang=pt&cur=BRL',
   },
 ];
 
