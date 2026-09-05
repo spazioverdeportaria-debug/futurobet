@@ -13,16 +13,20 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
-    // Test connection doc
-    match /test/{docId} {
-      allow read, write: if true;
-    }
-
-    // User profile documents indexed by CPF
+    // User profile documents indexed by CPF or telephone key
     match /users/{userId} {
+      // Allow individual user lookup by ID; prevent public bulk listing
       allow get: if isValidId(userId);
-      allow list: if true;
-      allow create, update: if isValidId(userId);
+      allow list: if false;
+      allow create: if isValidId(userId)
+        && request.resource.data.name is string
+        && request.resource.data.name.size() >= 2
+        && request.resource.data.name.size() <= 100
+        && request.resource.data.balance is number
+        && request.resource.data.balance >= 0;
+      allow update: if isValidId(userId)
+        && request.resource.data.balance is number
+        && request.resource.data.balance >= 0;
       allow delete: if false;
 
       // User bets subcollection
@@ -36,18 +40,22 @@ service cloud.firestore {
       }
     }
 
-    // Global Deposits Queue for Admin approval and User Realtime Tracking
+    // Deposits Queue
     match /deposits/{depositId} {
       allow get: if isValidId(depositId);
-      allow list: if true;
-      allow create, update, delete: if isValidId(depositId);
+      allow list: if false;
+      allow create: if isValidId(depositId)
+        && request.resource.data.amount is number
+        && request.resource.data.amount >= 5;
+      allow update: if isValidId(depositId);
+      allow delete: if false;
     }
 
     // Global System Settings (e.g. Maintenance Mode)
     match /system_settings/{settingId} {
-      allow get: if isValidId(settingId);
-      allow list: if true;
+      allow get, list: if isValidId(settingId);
       allow create, update: if isValidId(settingId);
+      allow delete: if false;
     }
   }
 }

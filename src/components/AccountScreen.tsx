@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { formatCPF, validateCPF } from '../utils/cpfValidator';
 import vegasBetLuxuryLogo from '../assets/images/vegasbet_luxury_logo_1786891904925.jpg';
 import { 
   User, 
@@ -91,7 +92,7 @@ const VIP_LEVELS: VIPLevel[] = [
 ];
 
 export default function AccountScreen({ balance, onOpenDeposit }: AccountScreenProps) {
-  const { account, isLoggedIn, logout, updateBalance } = useAuth();
+  const { account, isLoggedIn, logout, updateBalance, updateUserCpf } = useAuth();
   
   // Navigation & Modals
   const [activeTab, setActiveTab] = useState<'VISAO_GERAL' | 'VIP_CLUB' | 'EXTRATO' | 'CONFIGS'>('VISAO_GERAL');
@@ -111,9 +112,16 @@ export default function AccountScreen({ balance, onOpenDeposit }: AccountScreenP
   const [withdrawAmount, setWithdrawAmount] = useState<string>('50');
   const [pixKey, setPixKey] = useState<string>('');
   const [pixKeyType, setPixKeyType] = useState<'CPF' | 'CNPJ' | 'EMAIL' | 'PHONE' | 'EVP'>('CPF');
+  const [withdrawCpf, setWithdrawCpf] = useState<string>(account?.cpf ? formatCPF(account.cpf) : '');
   const [isProcessingWithdraw, setIsProcessingWithdraw] = useState(false);
   const [withdrawSuccessMsg, setWithdrawSuccessMsg] = useState<string | null>(null);
   const [withdrawErrorMsg, setWithdrawErrorMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (account?.cpf) {
+      setWithdrawCpf(formatCPF(account.cpf));
+    }
+  }, [account?.cpf]);
 
   // Custom Avatar Picker
   const [selectedAvatar, setSelectedAvatar] = useState<string>('🦁');
@@ -143,6 +151,13 @@ export default function AccountScreen({ balance, onOpenDeposit }: AccountScreenP
       setWithdrawErrorMsg('Saldo insuficiente para realizar este saque.');
       return;
     }
+
+    const cleanCpf = withdrawCpf.replace(/\D/g, '') || (account?.cpf ? account.cpf.replace(/\D/g, '') : '');
+    if (!cleanCpf || cleanCpf.length !== 11 || !validateCPF(cleanCpf)) {
+      setWithdrawErrorMsg('Por favor, digite um CPF válido (11 dígitos) para receber a transferência PIX.');
+      return;
+    }
+
     if (!pixKey.trim()) {
       setWithdrawErrorMsg('Informe a chave PIX para receber seu pagamento.');
       return;
@@ -151,6 +166,11 @@ export default function AccountScreen({ balance, onOpenDeposit }: AccountScreenP
     setIsProcessingWithdraw(true);
     setWithdrawErrorMsg(null);
     setWithdrawSuccessMsg(null);
+
+    // Salvar CPF se ainda não estava salvo na conta
+    if (!account?.cpf || account.cpf.replace(/\D/g, '') !== cleanCpf) {
+      await updateUserCpf(cleanCpf);
+    }
 
     try {
       const response = await fetch('/api/syncpay/withdraw', {
@@ -161,7 +181,7 @@ export default function AccountScreen({ balance, onOpenDeposit }: AccountScreenP
           pixKey: pixKey.trim(),
           pixKeyType,
           clientName: account?.name || 'Jogador FuturoBet',
-          clientCpf: account?.cpf || '000.000.000-00',
+          clientCpf: cleanCpf,
         }),
       });
 
@@ -922,6 +942,38 @@ export default function AccountScreen({ balance, onOpenDeposit }: AccountScreenP
                 onChange={(e) => setPixKey(e.target.value)}
                 className="w-full bg-black/80 border border-emerald-500/40 rounded-xl py-2.5 px-3 text-white text-xs font-mono focus:outline-none focus:border-emerald-400"
               />
+            </div>
+
+            {/* CPF do Titular (Obrigatório para Saque PIX Bancário) */}
+            <div className="space-y-1 bg-black/50 p-2.5 rounded-xl border border-amber-500/30">
+              <div className="flex items-center justify-between">
+                <label className="text-[10px] font-extrabold text-amber-300 uppercase">
+                  CPF do Titular da Conta
+                </label>
+                {account?.cpf ? (
+                  <span className="text-[9px] text-emerald-400 font-bold bg-emerald-500/20 px-1.5 py-0.5 rounded">
+                    ✓ Confirmado
+                  </span>
+                ) : (
+                  <span className="text-[9px] text-amber-400 font-bold bg-amber-500/20 px-1.5 py-0.5 rounded">
+                    Obrigatório no Saque
+                  </span>
+                )}
+              </div>
+              <input
+                type="text"
+                maxLength={14}
+                placeholder="000.000.000-00"
+                value={withdrawCpf}
+                onChange={(e) => {
+                  setWithdrawCpf(formatCPF(e.target.value));
+                  setWithdrawErrorMsg(null);
+                }}
+                className="w-full bg-black/80 border border-amber-500/40 rounded-xl py-2 px-3 text-white text-xs font-mono focus:outline-none focus:border-amber-400"
+              />
+              <span className="text-[9px] text-zinc-400 block leading-tight">
+                Exigência dos bancos para transferência via PIX em seu nome.
+              </span>
             </div>
 
             {/* Amount Input */}

@@ -17,6 +17,7 @@ import DailyPrizeWheel from './components/DailyPrizeWheel';
 import AuthModal from './components/AuthModal';
 import UserProfileModal from './components/UserProfileModal';
 import FloatingBonusPrompt from './components/FloatingBonusPrompt';
+import WelcomePromoPopups from './components/WelcomePromoPopups';
 import AdminPanel from './components/AdminPanel';
 import MaintenanceScreen from './components/MaintenanceScreen';
 import { AuthProvider, useAuth } from './context/AuthContext';
@@ -93,7 +94,13 @@ function FuturoBetContent() {
 
   const [localBalance, setLocalBalance] = useState<number>(() => {
     const saved = localStorage.getItem('vegas_local_balance');
-    return saved !== null ? Math.max(0, parseFloat(saved)) : 50.00;
+    if (saved !== null) {
+      const parsed = parseFloat(saved);
+      // Se era o antigo saldo inicial de demonstração (50.00), zera para a nova regra da conta zerada
+      if (parsed === 50) return 0.00;
+      return Math.max(0, isNaN(parsed) ? 0.00 : parsed);
+    }
+    return 0.00;
   });
   
   const [currentTab, setCurrentTab] = useState<NavTab>('cassino');
@@ -213,9 +220,10 @@ function FuturoBetContent() {
 
   const handleDepositSuccess = (amount: number) => {
     const bonus = amount; // 100% Deposit Bonus
-    const total = amount + bonus;
-    handleUpdateBalance(balance + total);
-    setDepositBonusAlert({ deposited: amount, bonus, total });
+    const totalAdded = amount + bonus;
+    const newTotalBalance = balance + totalAdded;
+    handleUpdateBalance(newTotalBalance);
+    setDepositBonusAlert({ deposited: amount, bonus, total: newTotalBalance });
   };
 
   // Abrir Jogo com trava de login
@@ -587,6 +595,13 @@ function FuturoBetContent() {
             </div>
           </div>
         )}
+
+        {/* POP-UPS PROMOCIONAIS DE ENTRADA NO CASSINO (4s Roleta e Sequência Pagando Muito) */}
+        <WelcomePromoPopups
+          onOpenWheel={handleOpenWheel}
+          onOpenGame={handleSelectGame}
+          isAnyModalOpen={Boolean(selectedGame || isAuthModalOpen || isCashierOpen || isDepositOpen || isWheelOpen || isProfileOpen || isExitCasinoModalOpen)}
+        />
 
         {/* POP-UP COMPACTO FLUTUANTE: 100% BÔNUS PARA CADASTRO */}
         <FloatingBonusPrompt

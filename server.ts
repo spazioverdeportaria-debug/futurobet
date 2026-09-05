@@ -1,5 +1,6 @@
 import express from 'express';
 import path from 'path';
+import crypto from 'crypto';
 import { GoogleGenAI } from '@google/genai';
 import { createServer as createViteServer } from 'vite';
 import {
@@ -35,7 +36,8 @@ async function startServer() {
   }
 
   interface RegisteredUser {
-    cpf: string;
+    id?: string;
+    cpf?: string;
     name: string;
     phone?: string;
     passwordHash?: string;
@@ -51,6 +53,39 @@ async function startServer() {
   const registeredUsers = new Map<string, RegisteredUser>();
   let globalMaintenanceMode = false;
   let globalMaintenanceMessage = 'Sistema em Manutenção para Melhorias. Voltamos em instantes!';
+
+  // Active Admin Sessions & Expirations (24h validity)
+  const activeAdminSessions = new Set<string>();
+  const adminSessionExpirations = new Map<string, number>();
+
+  const requireAdminAuth: express.RequestHandler = (req, res, next) => {
+    const authHeader = req.headers.authorization || '';
+    let token = '';
+    if (authHeader.startsWith('Bearer ')) {
+      token = authHeader.slice(7).trim();
+    } else if (req.headers['x-admin-token']) {
+      token = String(req.headers['x-admin-token']).trim();
+    }
+
+    if (!token || !activeAdminSessions.has(token)) {
+      return res.status(401).json({
+        success: false,
+        error: 'Acesso restrito. Faça login como administrador para continuar.',
+      });
+    }
+
+    const expiresAt = adminSessionExpirations.get(token) || 0;
+    if (Date.now() > expiresAt) {
+      activeAdminSessions.delete(token);
+      adminSessionExpirations.delete(token);
+      return res.status(401).json({
+        success: false,
+        error: 'Sessão de administrador expirada. Faça login novamente.',
+      });
+    }
+
+    next();
+  };
 
   // Health check
   app.get('/api/health', (req, res) => {
@@ -72,13 +107,22 @@ async function startServer() {
     });
   });
 
-  // Admin Login Endpoint (User: copywriter, Pass: 3657)
+  // Admin Login Endpoint (User: copywriter, Pass: 3657 or ADMIN_PASSWORD)
   app.post('/api/admin/login', (req, res) => {
     const { username, password } = req.body || {};
-    if (username === 'copywriter' && String(password).trim() === '3657') {
+    const validUser = 'copywriter';
+    const validPass = process.env.ADMIN_PASSWORD || '3657';
+
+    if (username === validUser && String(password).trim() === validPass) {
+      const sessionToken = `adm_${crypto.randomBytes(32).toString('hex')}`;
+      const expiresAt = Date.now() + 24 * 60 * 60 * 1000; // 24h
+      activeAdminSessions.add(sessionToken);
+      adminSessionExpirations.set(sessionToken, expiresAt);
+
       return res.json({
         success: true,
-        token: 'fb_admin_session_copywriter_3657',
+        token: sessionToken,
+        expiresAt,
         user: {
           username: 'copywriter',
           role: 'SUPER_ADMIN',
@@ -93,7 +137,7 @@ async function startServer() {
   });
 
   // Admin System Maintenance Toggle
-  app.post('/api/admin/maintenance', (req, res) => {
+  app.post('/api/admin/maintenance', requireAdminAuth, (req, res) => {
     const { maintenanceMode, maintenanceMessage } = req.body || {};
     if (typeof maintenanceMode === 'boolean') {
       globalMaintenanceMode = maintenanceMode;
@@ -110,7 +154,7 @@ async function startServer() {
   });
 
   // Admin Get All Moderated Deposits
-  app.get('/api/admin/deposits', (req, res) => {
+  app.get('/api/admin/deposits', requireAdminAuth, (req, res) => {
     const list = Array.from(moderatedDeposits.values()).sort(
       (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     );
@@ -123,7 +167,7 @@ async function startServer() {
   });
 
   // Admin Approve Deposit
-  app.post('/api/admin/deposits/approve', (req, res) => {
+  app.post('/api/admin/deposits/approve', requireAdminAuth, (req, res) => {
     const { transactionId } = req.body || {};
     if (!transactionId) {
       return res.status(400).json({ success: false, error: 'ID da transação não informado.' });
@@ -153,7 +197,7 @@ async function startServer() {
   });
 
   // Admin Reject Deposit
-  app.post('/api/admin/deposits/reject', (req, res) => {
+  app.post('/api/admin/deposits/reject', requireAdminAuth, (req, res) => {
     const { transactionId, reason } = req.body || {};
     if (!transactionId) {
       return res.status(400).json({ success: false, error: 'ID da transação não informado.' });
@@ -178,31 +222,40 @@ async function startServer() {
   app.post('/api/users/sync', (req, res) => {
     const { user, users: usersList } = req.body || {};
     const toProcess: RegisteredUser[] = [];
-    if (user && user.cpf) {
+    if (user && (user.cpf || user.phone || user.id || user.name)) {
       toProcess.push(user);
     }
     if (Array.isArray(usersList)) {
       usersList.forEach((u) => {
-        if (u && u.cpf) toProcess.push(u);
+        if (u && (u.cpf || u.phone || u.id || u.name)) toProcess.push(u);
       });
     }
 
     toProcess.forEach((u) => {
-      const cleanCpf = String(u.cpf).replace(/\D/g, '');
-      if (!cleanCpf) return;
-      const existing = registeredUsers.get(cleanCpf);
-      registeredUsers.set(cleanCpf, {
-        cpf: cleanCpf,
+      const cleanCpf = u.cpf ? String(u.cpf).replace(/\D/g, '') : '';
+      const cleanPhone = u.phone ? String(u.phone).replace(/\D/g, '') : '';
+      const userKey = cleanCpf || (cleanPhone ? `tel_${cleanPhone}` : (u.id || `usr_${u.name}`));
+      if (!userKey) return;
+
+      const existing = registeredUsers.get(userKey) || (cleanCpf ? registeredUsers.get(cleanCpf) : undefined);
+      const updatedData: RegisteredUser = {
+        id: userKey,
+        cpf: cleanCpf || existing?.cpf || '',
         name: u.name || existing?.name || 'Jogador FuturoBet',
         phone: u.phone || existing?.phone || '',
         passwordHash: u.passwordHash || existing?.passwordHash || '',
-        balance: typeof u.balance === 'number' ? u.balance : (existing?.balance ?? 50.00),
+        balance: typeof u.balance === 'number' ? u.balance : (existing?.balance ?? 0.00),
         balanceBonus: typeof u.balanceBonus === 'number' ? u.balanceBonus : (existing?.balanceBonus ?? 0.00),
         createdAt: u.createdAt || existing?.createdAt || new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         termsAccepted: u.termsAccepted ?? existing?.termsAccepted ?? true,
         referralCode: u.referralCode || existing?.referralCode,
-      });
+      };
+
+      registeredUsers.set(userKey, updatedData);
+      if (cleanCpf && userKey !== cleanCpf) {
+        registeredUsers.set(cleanCpf, updatedData);
+      }
     });
 
     const all = Array.from(registeredUsers.values()).sort(
@@ -216,8 +269,45 @@ async function startServer() {
     });
   });
 
+  // Client User Login Endpoint (Accepts phone, name or CPF + password)
+  app.post('/api/users/login', (req, res) => {
+    const { identifier, password } = req.body || {};
+    if (!identifier || !password) {
+      return res.status(400).json({ success: false, error: 'Informe telefone ou nome e sua senha.' });
+    }
+
+    const cleanIdent = String(identifier).trim();
+    const cleanDigits = cleanIdent.replace(/\D/g, '');
+    const nameLower = cleanIdent.toLowerCase();
+
+    for (const u of registeredUsers.values()) {
+      const uPhoneDigits = (u.phone || '').replace(/\D/g, '');
+      const uCpfDigits = (u.cpf || '').replace(/\D/g, '');
+      const uNameLower = (u.name || '').toLowerCase().trim();
+
+      const phoneMatches = cleanDigits.length >= 8 && (uPhoneDigits.includes(cleanDigits) || cleanDigits.includes(uPhoneDigits));
+      const cpfMatches = cleanDigits.length >= 10 && uCpfDigits === cleanDigits;
+      const nameMatches = nameLower.length >= 3 && (uNameLower === nameLower || uNameLower.includes(nameLower) || nameLower.includes(uNameLower));
+
+      if (phoneMatches || cpfMatches || nameMatches) {
+        const hash = crypto.createHash('sha256').update(`futurobet_salt_${password}`).digest('hex');
+        const passMatch = !u.passwordHash || u.passwordHash === password || u.passwordHash === hash;
+        if (!passMatch) {
+          return res.json({ success: false, error: 'Senha incorreta. Por favor, tente novamente.' });
+        }
+        return res.json({ success: true, user: u });
+      }
+    }
+
+    return res.json({ 
+      success: false, 
+      notFound: true, 
+      error: 'Não encontramos uma conta com este telefone ou nome. Cadastre-se em segundos!' 
+    });
+  });
+
   // Admin Get All Users
-  app.get('/api/admin/users', (req, res) => {
+  app.get('/api/admin/users', requireAdminAuth, (req, res) => {
     const all = Array.from(registeredUsers.values()).sort(
       (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     );
@@ -229,7 +319,7 @@ async function startServer() {
   });
 
   // Admin Update User Balance
-  app.post('/api/admin/users/update-balance', (req, res) => {
+  app.post('/api/admin/users/update-balance', requireAdminAuth, (req, res) => {
     const { cpf, amount, type } = req.body || {};
     const cleanCpf = String(cpf || '').replace(/\D/g, '');
     if (!cleanCpf) {
@@ -246,7 +336,7 @@ async function startServer() {
       user = {
         cpf: cleanCpf,
         name: 'Jogador FuturoBet',
-        balance: 50.00,
+        balance: 0.00,
         balanceBonus: 0.00,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
@@ -270,7 +360,7 @@ async function startServer() {
   });
 
   // Admin Reset User Password
-  app.post('/api/admin/users/reset-password', (req, res) => {
+  app.post('/api/admin/users/reset-password', requireAdminAuth, (req, res) => {
     const { cpf, newPassword } = req.body || {};
     const cleanCpf = String(cpf || '').replace(/\D/g, '');
     if (!cleanCpf || !newPassword) {
@@ -282,7 +372,7 @@ async function startServer() {
       user = {
         cpf: cleanCpf,
         name: 'Jogador FuturoBet',
-        balance: 50.00,
+        balance: 0.00,
         balanceBonus: 0.00,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
@@ -301,7 +391,7 @@ async function startServer() {
   });
 
   // Admin Stats
-  app.get('/api/admin/stats', (req, res) => {
+  app.get('/api/admin/stats', requireAdminAuth, (req, res) => {
     const list = Array.from(moderatedDeposits.values());
     const totalApprovedVolume = list
       .filter((d) => d.status === 'APPROVED')
@@ -471,8 +561,8 @@ async function startServer() {
     });
   });
 
-  // 4. Simulate Payment Completion for testing in UI / Gateway Signal
-  app.post('/api/syncpay/simulate-pay', (req, res) => {
+  // 4. Simulate Payment Completion for testing (Protected: Admin Only)
+  app.post('/api/syncpay/simulate-pay', requireAdminAuth, (req, res) => {
     const { transactionId } = req.body;
     if (transactionId) {
       if (pendingTransactions.has(transactionId)) {

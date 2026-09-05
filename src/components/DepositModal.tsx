@@ -43,7 +43,7 @@ export default function DepositModal({ isOpen, onClose, onSuccessDeposit }: Depo
   const [isPaymentConfirmed, setIsPaymentConfirmed] = useState<boolean>(false);
   const checkIntervalRef = useRef<any>(null);
 
-  const presetAmounts = [20, 30, 50, 100, 200, 500];
+  const presetAmounts = [5, 20, 50, 100, 1000];
 
   const finalAmount = customAmount ? parseFloat(customAmount) || 0 : selectedAmount;
   const bonusAmount = finalAmount; // 100% bonus
@@ -87,7 +87,7 @@ export default function DepositModal({ isOpen, onClose, onSuccessDeposit }: Depo
               });
             }
 
-            onSuccessDeposit(totalCredited);
+            onSuccessDeposit(finalAmount);
           } else if (data.status === 'PAID_PENDING_APPROVAL') {
             setIsWaitingAdminApproval(true);
           }
@@ -115,7 +115,7 @@ export default function DepositModal({ isOpen, onClose, onSuccessDeposit }: Depo
             setIsWaitingAdminApproval(false);
             setIsPaymentConfirmed(true);
             soundEngine.playWinChime();
-            onSuccessDeposit(totalCredited);
+            onSuccessDeposit(finalAmount);
             if (checkIntervalRef.current) clearInterval(checkIntervalRef.current);
           } else if (data && (data.status === 'PAID_PENDING_APPROVAL' || data.moderatedStatus === 'PAID_PENDING_APPROVAL')) {
             setIsWaitingAdminApproval(true);
@@ -158,70 +158,10 @@ export default function DepositModal({ isOpen, onClose, onSuccessDeposit }: Depo
     setErrorMessage(null);
   };
 
-  // Real SyncPayments Cash-In Direct Fallback in case of proxy issues
-  const requestDirectSyncPaymentsCashIn = async (amount: number, name: string, cpf: string): Promise<SyncPayPixData | null> => {
-    try {
-      const authRes = await fetch('https://api.syncpayments.com.br/api/partner/v1/auth-token', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-        body: JSON.stringify({
-          client_id: '36adf56b-e3f6-4319-b10b-e1347e62eafd',
-          client_secret: '8240be3d-2c32-4f78-8e71-6a2d0d523abc',
-        }),
-      });
-
-      if (!authRes.ok) return null;
-      const authData = await authRes.json();
-      const token = authData.access_token || authData.token;
-      if (!token) return null;
-
-      const cleanCpf = (cpf || '12345678909').replace(/\D/g, '') || '12345678909';
-      const cleanName = (name || 'Jogador FuturoBet').trim();
-
-      const cashInRes = await fetch('https://api.syncpayments.com.br/api/partner/v1/cash-in', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-          'Accept': 'application/json',
-        },
-        body: JSON.stringify({
-          amount: Number(amount.toFixed(2)),
-          description: `Deposito FuturoBet R$ ${amount.toFixed(2)}`,
-          client: {
-            name: cleanName,
-            cpf: cleanCpf,
-            email: 'cliente@futurobet.com',
-          },
-        }),
-      });
-
-      if (!cashInRes.ok) return null;
-      const cashInData = await cashInRes.json();
-      const pixCode = cashInData.pix_code || cashInData.qrcode || cashInData.emv || cashInData.data?.pix_code;
-      const identifier = cashInData.identifier || cashInData.id || `SYNC_${Date.now()}`;
-
-      if (pixCode) {
-        return {
-          transactionId: identifier,
-          amount,
-          pixCode,
-          qrCodeUrl: `https://api.qrserver.com/v1/create-qr-code/?size=300x300&margin=10&data=${encodeURIComponent(pixCode)}`,
-          expiresAt: cashInData.expires_at || new Date(Date.now() + 30 * 60 * 1000).toISOString(),
-          isSimulated: false,
-          status: 'PENDING',
-          gatewayMessage: 'PIX oficial gerado via SyncPayments',
-        };
-      }
-    } catch (e) {
-      console.warn('Direct SyncPayments call error:', e);
-    }
-    return null;
-  };
 
   const handleGeneratePix = async () => {
-    if (finalAmount < 20) {
-      setErrorMessage('O valor mínimo de depósito é R$ 20,00.');
+    if (finalAmount < 5) {
+      setErrorMessage('O valor mínimo de depósito é R$ 5,00.');
       soundEngine.playLockedSound();
       return;
     }
@@ -239,39 +179,23 @@ export default function DepositModal({ isOpen, onClose, onSuccessDeposit }: Depo
     setIsPaymentConfirmed(false);
 
     try {
-      let createdData: SyncPayPixData | null = null;
+      // Geração segura de cobrança PIX via servidor backend
+      const response = await fetch('/api/syncpay/deposit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        body: JSON.stringify({
+          amount: finalAmount,
+          clientName: clientName || 'Jogador FuturoBet',
+          clientCpf: clientCpf || '12345678909',
+        }),
+      });
 
-      // 1. First try serverless / API endpoint
-      try {
-        const response = await fetch('/api/syncpay/deposit', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-          body: JSON.stringify({
-            amount: finalAmount,
-            clientName: clientName || 'Jogador FuturoBet',
-            clientCpf: clientCpf || '12345678909',
-          }),
-        });
-
-        const contentType = response.headers.get('content-type') || '';
-        if (response.ok && contentType.includes('application/json')) {
-          const data = await response.json();
-          if (data && data.pixCode) {
-            createdData = data;
-          }
-        }
-      } catch (networkErr) {
-        console.warn('API endpoint call had an issue:', networkErr);
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Erro ao comunicar com o gateway de pagamento.');
       }
 
-      // 2. Fallback to direct SyncPayments Partner API
-      if (!createdData) {
-        createdData = await requestDirectSyncPaymentsCashIn(
-          finalAmount,
-          clientName || 'Jogador FuturoBet',
-          clientCpf || '12345678909'
-        );
-      }
+      const createdData: SyncPayPixData = await response.json();
 
       if (createdData && createdData.pixCode) {
         setPixData(createdData);
@@ -332,13 +256,7 @@ export default function DepositModal({ isOpen, onClose, onSuccessDeposit }: Depo
     setIsCheckingPayment(true);
 
     try {
-      // Send simulate-pay or check signal to gateway
-      await fetch('/api/syncpay/simulate-pay', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ transactionId: pixData.transactionId }),
-      }).catch(() => null);
-
+      // Consulta verificação real do PIX junto ao gateway e à moderação
       const res = await fetch(`/api/syncpay/check-pix/${encodeURIComponent(pixData.transactionId)}`);
       const data = await res.json();
 
@@ -346,7 +264,7 @@ export default function DepositModal({ isOpen, onClose, onSuccessDeposit }: Depo
         setIsWaitingAdminApproval(false);
         setIsPaymentConfirmed(true);
         soundEngine.playWinChime();
-        onSuccessDeposit(totalCredited);
+        onSuccessDeposit(finalAmount);
       } else {
         // Enters the moderated waiting screen
         setIsWaitingAdminApproval(true);
@@ -461,7 +379,7 @@ export default function DepositModal({ isOpen, onClose, onSuccessDeposit }: Depo
                 <input
                   type="text"
                   inputMode="decimal"
-                  placeholder="0,00 (Mínimo R$ 20)"
+                  placeholder="0,00 (Mínimo R$ 5)"
                   value={customAmount}
                   onChange={handleCustomAmountChange}
                   className="w-full bg-transparent text-sm font-bold text-white placeholder-zinc-600 focus:outline-none"

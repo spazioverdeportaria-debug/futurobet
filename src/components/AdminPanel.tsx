@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   ShieldCheck, Lock, User, KeyRound, AlertTriangle, Power,
   CheckCircle2, XCircle, Search, DollarSign, Plus, Minus,
@@ -42,15 +42,38 @@ interface AdminPanelProps {
 }
 
 export default function AdminPanel({ onBackToCasino }: AdminPanelProps) {
-  // Authentication State
+  // Authentication State with Server Token
+  const [adminToken, setAdminToken] = useState<string>(() => {
+    return sessionStorage.getItem('futurobet_admin_token') || localStorage.getItem('futurobet_admin_token') || '';
+  });
   const [isAdminAuthenticated, setIsAdminAuthenticated] = useState<boolean>(() => {
-    return localStorage.getItem('futurobet_admin_auth') === 'true';
+    const token = sessionStorage.getItem('futurobet_admin_token') || localStorage.getItem('futurobet_admin_token');
+    return Boolean(token) && localStorage.getItem('futurobet_admin_auth') === 'true';
   });
   const [usernameInput, setUsernameInput] = useState('');
   const [passwordInput, setPasswordInput] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loginError, setLoginError] = useState<string | null>(null);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
+
+  // Helper for authorized admin request headers
+  const getAdminHeaders = useCallback(() => {
+    const token = adminToken || sessionStorage.getItem('futurobet_admin_token') || localStorage.getItem('futurobet_admin_token') || '';
+    return {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`,
+    };
+  }, [adminToken]);
+
+  // Handle session invalidation (401)
+  const handleUnauthorized = useCallback(() => {
+    sessionStorage.removeItem('futurobet_admin_token');
+    localStorage.removeItem('futurobet_admin_token');
+    localStorage.removeItem('futurobet_admin_auth');
+    setAdminToken('');
+    setIsAdminAuthenticated(false);
+    showToast('Sessão expirada. Faça login novamente.', 'error');
+  }, []);
 
   // Navigation Tabs
   const [activeTab, setActiveTab] = useState<'deposits' | 'users' | 'system' | 'support'>('deposits');
@@ -127,43 +150,37 @@ export default function AdminPanel({ onBackToCasino }: AdminPanelProps) {
       const cleanUser = usernameInput.trim();
       const cleanPass = passwordInput.trim();
 
-      if (cleanUser === 'copywriter' && cleanPass === '3657') {
+      const res = await fetch('/api/admin/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: cleanUser, password: cleanPass }),
+      });
+      const data = await res.json();
+
+      if (data.success && data.token) {
+        sessionStorage.setItem('futurobet_admin_token', data.token);
+        localStorage.setItem('futurobet_admin_token', data.token);
         localStorage.setItem('futurobet_admin_auth', 'true');
+        setAdminToken(data.token);
         setIsAdminAuthenticated(true);
         soundEngine.playWinChime();
         showToast('Bem-vindo ao Painel Administrativo do FuturoBet!');
       } else {
-        // Also verify with backend endpoint
-        const res = await fetch('/api/admin/login', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ username: cleanUser, password: cleanPass }),
-        });
-        const data = await res.json();
-        if (data.success) {
-          localStorage.setItem('futurobet_admin_auth', 'true');
-          setIsAdminAuthenticated(true);
-          soundEngine.playWinChime();
-          showToast('Bem-vindo ao Painel Administrativo do FuturoBet!');
-        } else {
-          setLoginError('Usuário ou senha de administrador incorretos.');
-          soundEngine.playLockedSound();
-        }
+        setLoginError(data.error || 'Usuário ou senha de administrador incorretos.');
+        soundEngine.playLockedSound();
       }
-    } catch (err) {
-      if (usernameInput.trim() === 'copywriter' && passwordInput.trim() === '3657') {
-        localStorage.setItem('futurobet_admin_auth', 'true');
-        setIsAdminAuthenticated(true);
-      } else {
-        setLoginError('Credenciais incorretas.');
-      }
+    } catch (err: any) {
+      setLoginError(err?.message || 'Falha de conexão com o servidor.');
     } finally {
       setIsLoggingIn(false);
     }
   };
 
   const handleAdminLogout = () => {
+    sessionStorage.removeItem('futurobet_admin_token');
+    localStorage.removeItem('futurobet_admin_token');
     localStorage.removeItem('futurobet_admin_auth');
+    setAdminToken('');
     setIsAdminAuthenticated(false);
     showToast('Sessão encerrada com sucesso.', 'info');
   };
@@ -209,10 +226,16 @@ export default function AdminPanel({ onBackToCasino }: AdminPanelProps) {
     if (!isAdminAuthenticated) return;
 
     const fetchServerDeposits = () => {
-      fetch('/api/admin/deposits')
-        .then((r) => r.json())
+      fetch('/api/admin/deposits', { headers: getAdminHeaders() })
+        .then((r) => {
+          if (r.status === 401) {
+            handleUnauthorized();
+            return null;
+          }
+          return r.json();
+        })
         .then((data) => {
-          if (data.success && Array.isArray(data.deposits)) {
+          if (data && data.success && Array.isArray(data.deposits)) {
             setDeposits((prev) => {
               const map = new Map<string, DepositItem>();
               prev.forEach((d) => map.set(d.id || d.transactionId, d));
@@ -278,7 +301,7 @@ export default function AdminPanel({ onBackToCasino }: AdminPanelProps) {
                   name: u.name || 'Jogador FuturoBet',
                   phone: u.phone || '',
                   passwordHash: u.passwordHash || '',
-                  balance: typeof u.balance === 'number' ? u.balance : 50.00,
+                  balance: typeof u.balance === 'number' ? u.balance : 0.00,
                   balanceBonus: typeof u.balanceBonus === 'number' ? u.balanceBonus : 0.00,
                   createdAt: u.createdAt || new Date().toISOString(),
                   updatedAt: u.updatedAt || new Date().toISOString(),
@@ -316,10 +339,16 @@ export default function AdminPanel({ onBackToCasino }: AdminPanelProps) {
 
     // B) Fetch from Backend periodically
     const fetchServerUsers = () => {
-      fetch('/api/admin/users')
-        .then((r) => r.json())
+      fetch('/api/admin/users', { headers: getAdminHeaders() })
+        .then((r) => {
+          if (r.status === 401) {
+            handleUnauthorized();
+            return null;
+          }
+          return r.json();
+        })
         .then((data) => {
-          if (data.success && Array.isArray(data.users)) {
+          if (data && data.success && Array.isArray(data.users)) {
             setUsers((prev) => {
               const map = new Map<string, UserProfile>();
               prev.forEach((u) => map.set(u.cpf.replace(/\D/g, ''), u));
@@ -402,7 +431,7 @@ export default function AdminPanel({ onBackToCasino }: AdminPanelProps) {
       // 1. Update Backend
       await fetch('/api/admin/maintenance', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAdminHeaders(),
         body: JSON.stringify({
           maintenanceMode: nextState,
           maintenanceMessage: maintenanceMessage,
@@ -436,7 +465,7 @@ export default function AdminPanel({ onBackToCasino }: AdminPanelProps) {
     try {
       await fetch('/api/admin/maintenance', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAdminHeaders(),
         body: JSON.stringify({
           maintenanceMode,
           maintenanceMessage,
@@ -466,7 +495,7 @@ export default function AdminPanel({ onBackToCasino }: AdminPanelProps) {
       // 1. Notify Backend
       await fetch('/api/admin/deposits/approve', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAdminHeaders(),
         body: JSON.stringify({ transactionId: txId }),
       });
 
@@ -539,7 +568,7 @@ export default function AdminPanel({ onBackToCasino }: AdminPanelProps) {
     try {
       await fetch('/api/admin/deposits/reject', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAdminHeaders(),
         body: JSON.stringify({ transactionId: txId, reason }),
       });
 
@@ -602,7 +631,7 @@ export default function AdminPanel({ onBackToCasino }: AdminPanelProps) {
       // Also notify backend
       fetch('/api/admin/users/update-balance', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAdminHeaders(),
         body: JSON.stringify({ cpf: cleanCpf, amount, type }),
       }).catch(() => null);
 
@@ -646,7 +675,7 @@ export default function AdminPanel({ onBackToCasino }: AdminPanelProps) {
       // Also notify backend
       fetch('/api/admin/users/reset-password', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAdminHeaders(),
         body: JSON.stringify({ cpf: cleanCpf, newPassword: newPass }),
       }).catch(() => null);
 

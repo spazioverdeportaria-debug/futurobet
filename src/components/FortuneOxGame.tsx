@@ -64,8 +64,8 @@ export default function FortuneOxGame({
   const displayName = gameName || catalogGame?.name || 'FuturoBet Slot';
   const gameBg = catalogGame?.bgImage || catalogGame?.icon || '';
 
-  const MIN_BALANCE_REQUIRED = 20.00;
-  const isBalanceInsufficient = balance < MIN_BALANCE_REQUIRED;
+  const MIN_BALANCE_REQUIRED = 0.50;
+  const isBalanceInsufficient = balance <= 0 || balance < MIN_BALANCE_REQUIRED;
 
   // Estado para controlar se o popup de saldo está aberto (inicia fechado para o usuário ver o jogo carregando)
   const [showDepositPopup, setShowDepositPopup] = useState<boolean>(false);
@@ -104,9 +104,10 @@ export default function FortuneOxGame({
     const currentBal = balanceRef.current;
     const betCost = currentBetRef.current;
     
-    // Se não tiver saldo mínimo de R$ 20,00 para jogar, bloqueia e abre o depósito
-    if (currentBal < 20.00) {
+    // Se não tiver saldo suficiente para a aposta, bloqueia e abre o depósito
+    if (currentBal <= 0 || currentBal < betCost) {
       soundEngine.playLockedSound();
+      setShowDepositPopup(true);
       return;
     }
 

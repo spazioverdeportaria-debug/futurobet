@@ -13,7 +13,7 @@ export default function MiddleBannerCarousel({ onOpenDeposit }: MiddleBannerCaro
       id: 'bonus-banner',
       tag: '🎁 BÔNUS 100% PIX',
       title: 'DOBRAMOS SEU PRIMEIRO DEPÓSITO',
-      subtitle: 'Deposite R$ 20 e jogue com R$ 40 na hora!',
+      subtitle: 'Deposite a partir de R$ 5 e receba 100% de bônus em dobro na hora!',
       buttonText: 'DOBRAR ⚡',
       icon: Gift,
       image: 'https://i.pinimg.com/1200x/d5/a6/6a/d5a66a9e6425636bb7c89537d26af07f.jpg',
