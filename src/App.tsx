@@ -20,6 +20,7 @@ import FloatingBonusPrompt from './components/FloatingBonusPrompt';
 import WelcomePromoPopups from './components/WelcomePromoPopups';
 import AdminPanel from './components/AdminPanel';
 import MaintenanceScreen from './components/MaintenanceScreen';
+import AppDownloadLanding from './components/AppDownloadLanding';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { db, doc, onSnapshot } from './lib/firebase';
 
@@ -42,6 +43,67 @@ function FuturoBetContent() {
   const [maintenanceMessage, setMaintenanceMessage] = useState<string>(
     'Estamos realizando melhorias programadas em nossos servidores. Voltamos em instantes!'
   );
+
+  // 📱 Pré-Landing Page Presell (Anti-Bloqueio Meta Ads / App Store Presell)
+  const [showPresellLanding, setShowPresellLanding] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    const urlParams = new URLSearchParams(window.location.search);
+    const hash = window.location.hash.toLowerCase();
+    const path = window.location.pathname.toLowerCase();
+
+    // Se o usuário pedir explicitamente para testar/ver a landing page via URL
+    const isExplicitDownload = 
+      urlParams.get('download') === '1' || 
+      urlParams.get('lp') === '1' || 
+      path === '/download' || 
+      path === '/app' || 
+      hash.includes('#download') || 
+      hash.includes('#/download') ||
+      hash.includes('#app') ||
+      hash.includes('#/app');
+
+    if (isExplicitDownload) return true;
+
+    // Se já estiver logado/cadastrado no navegador, NUNCA mostra a presell (vai direto pra Home)
+    const storedAuth = localStorage.getItem('futurobet_current_user') || localStorage.getItem('vegas_cpf_data');
+    if (storedAuth) return false;
+
+    // Se já dispensou/instalou nesta sessão/navegador, não exibe novamente
+    const alreadyDismissed = localStorage.getItem('fb_presell_dismissed') === 'true';
+    if (alreadyDismissed) return false;
+
+    // Verifica parâmetros de campanha do Meta Ads e outras fontes de tráfego pago
+    const hasCampaignParam = 
+      urlParams.has('src') || 
+      urlParams.has('utm_source') || 
+      urlParams.has('utm_campaign') || 
+      urlParams.has('fbclid') || 
+      urlParams.has('ref') || 
+      urlParams.has('ad') || 
+      urlParams.has('app');
+
+    return hasCampaignParam;
+  });
+
+  const [campaignGameParam] = useState<string | null>(() => {
+    if (typeof window === 'undefined') return null;
+    const urlParams = new URLSearchParams(window.location.search);
+    return urlParams.get('app') || urlParams.get('game') || 'fortune-tiger';
+  });
+
+  // Atualiza exibição caso o usuário teste via hash (#download)
+  useEffect(() => {
+    const handleHash = () => {
+      const h = window.location.hash.toLowerCase();
+      const p = window.location.pathname.toLowerCase();
+      const q = new URLSearchParams(window.location.search);
+      if (h.includes('#download') || h.includes('#/download') || p === '/download' || q.get('download') === '1') {
+        setShowPresellLanding(true);
+      }
+    };
+    window.addEventListener('hashchange', handleHash);
+    return () => window.removeEventListener('hashchange', handleHash);
+  }, []);
 
   useEffect(() => {
     const checkPath = () => {
@@ -294,6 +356,26 @@ function FuturoBetContent() {
         onAdminAccess={() => {
           window.history.pushState({}, '', '/admin');
           setIsAdminRoute(true);
+        }}
+      />
+    );
+  }
+
+  // 📱 3. Render Presell / Download Landing Page for Meta Ads Traffic
+  if (showPresellLanding && !isLoggedIn) {
+    return (
+      <AppDownloadLanding
+        gameIdParam={campaignGameParam}
+        onEnterCasino={(options) => {
+          setShowPresellLanding(false);
+          if (options?.directGame) {
+            setSelectedGame(options.directGame);
+          }
+          if (options?.directRegister) {
+            setAuthModalMode('register');
+            setAuthActionName('resgatar 100% de bônus no 1º depósito');
+            setIsAuthModalOpen(true);
+          }
         }}
       />
     );

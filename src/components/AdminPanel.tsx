@@ -84,6 +84,7 @@ export default function AdminPanel({ onBackToCasino }: AdminPanelProps) {
     'Sistema em Manutenção para Melhorias. Voltamos em instantes!'
   );
   const [isSavingMaintenance, setIsSavingMaintenance] = useState(false);
+  const [copiedPresellLink, setCopiedPresellLink] = useState<string | null>(null);
 
   // Moderated Deposits State
   const [deposits, setDeposits] = useState<DepositItem[]>([]);
@@ -1653,7 +1654,118 @@ export default function AdminPanel({ onBackToCasino }: AdminPanelProps) {
 
             </div>
 
-            {/* Gateway & Environment Diagnostic */}
+            {/* Meta Ads Presell Strategy (Anti-Bloqueio / Loja de Aplicativos) */}
+            <div className="bg-[#11131c] border border-blue-500/40 rounded-3xl p-6 sm:p-7 space-y-5 shadow-[0_0_30px_rgba(59,130,246,0.1)]">
+              <div className="flex items-start justify-between gap-4">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="w-5 h-5 text-blue-400" />
+                    <h3 className="text-base font-black text-white uppercase tracking-wide">
+                      Estratégia Anti-Bloqueio Meta Ads (Presell App Store)
+                    </h3>
+                  </div>
+                  <p className="text-xs text-zinc-400 max-w-xl leading-relaxed">
+                    Página inicial alternativa estilo <strong>App Store / Google Play</strong> que evita rejeição de anúncios no Facebook e Instagram.
+                    Visitantes comuns continuam entrando direto na Home do cassino normalmente. Apenas quem clica no link do anúncio verá a tela de download de app!
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    const origin = window.location.origin;
+                    window.open(`${origin}/?download=1`, '_blank');
+                  }}
+                  className="px-3.5 py-2 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs uppercase rounded-xl transition flex items-center gap-1.5 cursor-pointer shrink-0 shadow"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  <span>Testar Pré-Landing</span>
+                </button>
+              </div>
+
+              {/* Links Prontos para Copiar */}
+              <div className="space-y-3 pt-2 border-t border-zinc-800 text-xs">
+                <label className="text-[11px] font-black text-zinc-300 uppercase tracking-wider block">
+                  LINKS PARA COLOCAR NOS ANÚNCIOS DO FACEBOOK / INSTAGRAM:
+                </label>
+
+                {/* Link 1: Fortune Tiger */}
+                <div className="p-3 bg-[#171924] rounded-2xl border border-zinc-800 space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-amber-400 flex items-center gap-1.5">
+                      <span>🐯 Campanha Fortune Tiger (Tigrinho):</span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const url = `${window.location.origin}/?src=fb&app=tiger`;
+                        navigator.clipboard.writeText(url);
+                        setCopiedPresellLink('tiger');
+                        setTimeout(() => setCopiedPresellLink(null), 2500);
+                      }}
+                      className="px-2.5 py-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded-lg text-[11px] font-bold flex items-center gap-1 transition cursor-pointer"
+                    >
+                      {copiedPresellLink === 'tiger' ? (
+                        <>
+                          <Check className="w-3 h-3 text-emerald-400" />
+                          <span className="text-emerald-400">Copiado!</span>
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="w-3 h-3" />
+                          <span>Copiar Link</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                  <div className="font-mono text-[11px] text-zinc-400 truncate bg-black/40 p-2 rounded-lg select-all">
+                    {typeof window !== 'undefined' ? `${window.location.origin}/?src=fb&app=tiger` : '/?src=fb&app=tiger'}
+                  </div>
+                </div>
+
+                {/* Link 2: Fortune Ox */}
+                <div className="p-3 bg-[#171924] rounded-2xl border border-zinc-800 space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-emerald-400 flex items-center gap-1.5">
+                      <span>🐂 Campanha Fortune Ox (Touro):</span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const url = `${window.location.origin}/?src=fb&app=ox`;
+                        navigator.clipboard.writeText(url);
+                        setCopiedPresellLink('ox');
+                        setTimeout(() => setCopiedPresellLink(null), 2500);
+                      }}
+                      className="px-2.5 py-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded-lg text-[11px] font-bold flex items-center gap-1 transition cursor-pointer"
+                    >
+                      {copiedPresellLink === 'ox' ? (
+                        <>
+                          <Check className="w-3 h-3 text-emerald-400" />
+                          <span className="text-emerald-400">Copiado!</span>
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="w-3 h-3" />
+                          <span>Copiar Link</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                  <div className="font-mono text-[11px] text-zinc-400 truncate bg-black/40 p-2 rounded-lg select-all">
+                    {typeof window !== 'undefined' ? `${window.location.origin}/?src=fb&app=ox` : '/?src=fb&app=ox'}
+                  </div>
+                </div>
+
+                {/* Como Funciona a Proteção */}
+                <div className="p-3 bg-blue-950/20 border border-blue-500/20 rounded-xl text-[11px] text-zinc-400 space-y-1">
+                  <span className="text-blue-300 font-bold block">Como os anúncios são protegidos de bloqueio:</span>
+                  <p>1. O robô do Meta revisa a página e enxerga uma página limpa de aplicativo de jogo casual com 4.9 estrelas e sem botões diretos de aposta.</p>
+                  <p>2. Ao clicar em "Obter app", o jogador inicia a instalação, tem seu cadastro aberto com bônus e passa a acessar o cassino completo.</p>
+                  <p>3. Jogadores já cadastrados ou que acessam o link direto do site entram 100% direto na Home do cassino.</p>
+                </div>
+              </div>
+            </div>
             <div className="bg-[#11131c] border border-zinc-800 rounded-3xl p-6 space-y-4">
               <h4 className="text-xs font-black uppercase tracking-wider text-zinc-300">
                 Diagnóstico de Integração SyncPay & Banco de Dados
