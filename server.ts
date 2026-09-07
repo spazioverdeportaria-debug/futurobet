@@ -840,8 +840,8 @@ async function startServer() {
         const kickoff = new Date(kickoffStr).getTime();
         if (isNaN(kickoff)) continue;
 
-        // Check if currently live
-        const isLive = computedStatus === 'IN_PLAY' || computedStatus === 'PAUSED' || (computedStatus !== 'FINISHED' && nowTime >= kickoff && nowTime <= kickoff + (115 * 60 * 1000));
+        // Check if currently live - ONLY genuine in-play or paused matches from the official API
+        const isLive = computedStatus === 'IN_PLAY' || computedStatus === 'PAUSED';
         if (isLive && computedStatus !== 'PAUSED') {
           computedStatus = 'IN_PLAY';
         }

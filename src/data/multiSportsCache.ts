@@ -1002,8 +1002,11 @@ export async function getOrFetchMmaMatches(): Promise<SportsMatch[]> {
 
 // Convert FootballMatch to SportsMatch
 export function convertFootballToSportsMatch(f: FootballMatch): SportsMatch {
+  // Ensure strict adherence: a game is ONLY live if officially in play or paused
+  const reallyLive = Boolean(f.isLive && (f.status === 'IN_PLAY' || f.status === 'PAUSED'));
   return {
     ...f,
+    isLive: reallyLive,
     sport: 'SOCCER',
   };
 }

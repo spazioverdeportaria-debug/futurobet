@@ -1047,6 +1047,44 @@ export const AUTO_SYNC_INTERVAL_MS = 20 * 60 * 1000;
  * Fetches 100% REAL official football matches from live API.
  * Strict rule: NEVER generate fake, fabricated, or non-existent games.
  */
+export function normalizeMatchDates(matches: FootballMatch[]): FootballMatch[] {
+  return matches.map((m) => {
+    if (m.isFinished) {
+      return {
+        ...m,
+        timeFormatted: 'Fim de Jogo 🏁',
+        timeOnly: 'Encerrado',
+        status: 'FINISHED',
+        isLive: false,
+      };
+    }
+    const reallyLive = Boolean(m.isLive && (m.status === 'IN_PLAY' || m.status === 'PAUSED'));
+    if (reallyLive) {
+      return {
+        ...m,
+        isLive: true,
+        status: m.status === 'PAUSED' ? 'PAUSED' : 'IN_PLAY',
+      };
+    }
+    if (m.dateTimestamp) {
+      const sched = formatMatchSchedule(new Date(m.dateTimestamp));
+      return {
+        ...m,
+        isLive: false,
+        status: m.status === 'FINISHED' ? 'FINISHED' : 'TIMED',
+        dayFormatted: sched.dayFormatted,
+        timeOnly: sched.timeOnly,
+        fullDateTimeFormatted: sched.fullDateTimeFormatted,
+        timeFormatted: `${sched.dayFormatted} • ${sched.timeOnly}`,
+      };
+    }
+    return {
+      ...m,
+      isLive: false,
+    };
+  });
+}
+
 export async function getOrFetchFootballMatches(forceRefresh = false): Promise<FootballMatch[]> {
   const now = Date.now();
 
@@ -1194,9 +1232,10 @@ export async function getOrFetchFootballMatches(forceRefresh = false): Promise<F
           finalMatches.push(...CORE_UPCOMING_MATCHES.filter((m) => m.category === 'COPA_DO_BRASIL'));
         }
 
-        cachedMatches = finalMatches;
+        const normalized = normalizeMatchDates(finalMatches);
+        cachedMatches = normalized;
         lastFetchTime = Date.now();
-        return finalMatches;
+        return normalized;
       }
     } catch (err) {
       console.warn('getOrFetchFootballMatches API error:', err);
@@ -1206,7 +1245,7 @@ export async function getOrFetchFootballMatches(forceRefresh = false): Promise<F
 
     // Fallback scheduled real matches if API unreachable (e.g. offline or strict network)
     if (!cachedMatches || cachedMatches.length === 0) {
-      cachedMatches = [...CORE_UPCOMING_MATCHES, ...FALLBACK_FINISHED_MATCHES];
+      cachedMatches = normalizeMatchDates([...CORE_UPCOMING_MATCHES, ...FALLBACK_FINISHED_MATCHES]);
     }
     return cachedMatches;
   })();

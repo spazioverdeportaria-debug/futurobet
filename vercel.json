@@ -5,6 +5,14 @@
       "destination": "/api/football/matches"
     },
     {
+      "source": "/api/sports/basketball",
+      "destination": "/api/sports/basketball"
+    },
+    {
+      "source": "/api/sports/mma",
+      "destination": "/api/sports/mma"
+    },
+    {
       "source": "/api/syncpay/deposit",
       "destination": "/api/syncpay/deposit"
     },
