@@ -1,645 +1,570 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { 
   Star, 
   ShieldCheck, 
   CheckCircle2, 
   Lock, 
-  Play, 
-  Sparkles, 
   ChevronRight, 
-  Gift, 
-  Zap, 
   ArrowRight,
   MessageCircle,
-  Users,
-  TrendingUp,
-  Award,
-  Wallet,
-  Clock,
-  HelpCircle,
-  AlertCircle
+  Share2,
+  Info,
+  Download,
+  Check
 } from 'lucide-react';
 
-import tigerSlotImg from '../assets/images/fortune_tiger_slot_screen_1785009353922.jpg';
-import oxSlotImg from '../assets/images/fortune_ox_screen_1785008108345.jpg';
-import rabbitSlotImg from '../assets/images/fortune_rabbit_slot_screen_1785006591458.jpg';
-import luckyTigerGoldImg from '../assets/images/lucky_tiger_gold_slot_1788738484588.jpg';
-import sevenRushImg from '../assets/images/seven_rush_slot_1788738497552.jpg';
-import bingoManiaImg from '../assets/images/bingo_mania_slot_1788738511110.jpg';
+import appIconImg from '../assets/images/futurobet_app_icon_1788740802769.jpg';
 import promoRoletaImg from '../assets/images/promo_roleta_banner_1788621267724.jpg';
 import promoTigerImg from '../assets/images/promo_tiger_pagando_1788621281607.jpg';
-import wheelBlitzImg from '../assets/images/wheel_blitz_slot_1788619037026.jpg';
-import deathDominionImg from '../assets/images/death_dominion_slot_1788619080433.jpg';
+import gamesScreenImg from '../assets/images/vegasbet_games_screen_1785002600335.jpg';
+import oxSlotImg from '../assets/images/fortune_ox_screen_1785008108345.jpg';
 
 interface AppDownloadLandingProps {
   onEnterCasino: (options?: { directRegister?: boolean; directGame?: string }) => void;
   gameIdParam?: string | null;
 }
 
-interface ShowcaseGame {
-  id: string;
-  name: string;
-  provider: string;
-  category: 'slots' | 'crash' | 'novos';
-  rtp: string;
-  image: string;
-  badge: 'HOT' | 'PAGANDO' | 'NOVO' | 'TURBO' | 'POPULAR';
-  accentColor: string;
-  multiplier: string;
-}
-
-const SHOWCASE_GAMES: ShowcaseGame[] = [
-  {
-    id: 'fortune-tiger',
-    name: 'Fortune Tiger',
-    provider: 'PG SOFT',
-    category: 'slots',
-    rtp: '96.81%',
-    image: tigerSlotImg,
-    badge: 'HOT',
-    accentColor: '#f59e0b',
-    multiplier: 'x2.500',
-  },
-  {
-    id: 'fortune-ox',
-    name: 'Fortune Ox',
-    provider: 'PG SOFT',
-    category: 'slots',
-    rtp: '96.75%',
-    image: oxSlotImg,
-    badge: 'PAGANDO',
-    accentColor: '#ef4444',
-    multiplier: 'x2.000',
-  },
-  {
-    id: 'lucky-tiger-gold',
-    name: 'Lucky Tiger Gold',
-    provider: 'PRAGMATIC PLAY',
-    category: 'slots',
-    rtp: '96.50%',
-    image: luckyTigerGoldImg,
-    badge: 'POPULAR',
-    accentColor: '#f59e0b',
-    multiplier: 'x25.000',
-  },
-  {
-    id: '777-rush',
-    name: '777 Rush',
-    provider: 'PRAGMATIC PLAY',
-    category: 'slots',
-    rtp: '96.50%',
-    image: sevenRushImg,
-    badge: 'TURBO',
-    accentColor: '#ef4444',
-    multiplier: 'x2.000',
-  },
-  {
-    id: 'gates-of-olympus',
-    name: 'Gates of Olympus',
-    provider: 'PRAGMATIC PLAY',
-    category: 'slots',
-    rtp: '96.50%',
-    image: 'https://fruityslots.com/wp-content/uploads/2021/05/gates-of-olympus-slot-logo.jpg',
-    badge: 'HOT',
-    accentColor: '#3b82f6',
-    multiplier: 'x5.000',
-  },
-  {
-    id: 'mines',
-    name: 'Mines',
-    provider: 'SPRIBE',
-    category: 'crash',
-    rtp: '97.00%',
-    image: 'https://www.gazetavirtual.com.br/wp-content/uploads/2023/05/Mines.png',
-    badge: 'HOT',
-    accentColor: '#10b981',
-    multiplier: 'x10.000',
-  },
-  {
-    id: 'bingo-mania',
-    name: 'Bingo Mania',
-    provider: 'PRAGMATIC PLAY',
-    category: 'novos',
-    rtp: '96.51%',
-    image: bingoManiaImg,
-    badge: 'NOVO',
-    accentColor: '#8b5cf6',
-    multiplier: 'x5.000',
-  },
-  {
-    id: 'fortune-rabbit',
-    name: 'Fortune Rabbit',
-    provider: 'PG SOFT',
-    category: 'slots',
-    rtp: '96.75%',
-    image: rabbitSlotImg,
-    badge: 'PAGANDO',
-    accentColor: '#ec4899',
-    multiplier: 'x5.000',
-  },
-  {
-    id: 'sugar-rush',
-    name: 'Sugar Rush 1000',
-    provider: 'PRAGMATIC PLAY',
-    category: 'slots',
-    rtp: '96.53%',
-    image: 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcR07w2a-Wq0Yv18L3-oD45-zIeFkS6pL9G4kg&s',
-    badge: 'HOT',
-    accentColor: '#f43f5e',
-    multiplier: 'x25.000',
-  },
-  {
-    id: 'aviator',
-    name: 'Aviator',
-    provider: 'SPRIBE',
-    category: 'crash',
-    rtp: '97.00%',
-    image: 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcR6sJ5zR7W5h8iQp3eY2j0tV4X7z9k1B3m4gA&s',
-    badge: 'TURBO',
-    accentColor: '#ef4444',
-    multiplier: 'x10.000',
-  },
-];
-
-const RECENT_WINNERS = [
-  { name: 'Lucas M.', amount: 'R$ 3.840,00', game: 'Gates of Olympus', time: 'Há 1 min' },
-  { name: 'Fernanda L.', amount: 'R$ 1.920,00', game: 'Fortune Tiger', time: 'Há 2 min' },
-  { name: 'Gabriel S.', amount: 'R$ 5.400,00', game: 'Lucky Tiger Gold', time: 'Há 3 min' },
-  { name: 'Rafaela C.', amount: 'R$ 950,00', game: 'Mines', time: 'Há 5 min' },
-];
-
 export default function AppDownloadLanding({ onEnterCasino, gameIdParam }: AppDownloadLandingProps) {
-  const [selectedCategory, setSelectedCategory] = useState<'todos' | 'slots' | 'crash' | 'novos'>('todos');
-  const [activeWinnerIndex, setActiveWinnerIndex] = useState(0);
+  const [isInstalling, setIsInstalling] = useState(false);
+  const [installProgress, setInstallProgress] = useState(0);
+  const [installStatus, setInstallStatus] = useState<string>('');
+  const [showFullDescription, setShowFullDescription] = useState(false);
 
   const supportPhone = '42999687965';
-  const supportMessage = encodeURIComponent('Olá, preciso de suporte no FuturoBet.');
+  const supportMessage = encodeURIComponent('Olá, vim pela página oficial do FuturoBet e preciso de suporte.');
   const whatsappUrl = `https://wa.me/55${supportPhone}?text=${supportMessage}`;
 
-  // Rotação suave dos ganhadores em tempo real
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setActiveWinnerIndex((prev) => (prev + 1) % RECENT_WINNERS.length);
-    }, 3500);
-    return () => clearInterval(timer);
-  }, []);
+  // Executa o fluxo de instalação realista da Play Store e direciona ao cassino
+  const handleInstallClick = () => {
+    if (isInstalling) return;
 
-  // Determina o jogo em destaque se veio por parâmetro de anúncio
-  const featuredGame = (() => {
-    const p = (gameIdParam || '').toLowerCase();
-    if (p.includes('ox') || p.includes('touro')) {
-      return SHOWCASE_GAMES.find((g) => g.id === 'fortune-ox') || SHOWCASE_GAMES[0];
-    }
-    if (p.includes('lucky') || p.includes('gold')) {
-      return SHOWCASE_GAMES.find((g) => g.id === 'lucky-tiger-gold') || SHOWCASE_GAMES[0];
-    }
-    if (p.includes('777') || p.includes('rush')) {
-      return SHOWCASE_GAMES.find((g) => g.id === '777-rush') || SHOWCASE_GAMES[0];
-    }
-    if (p.includes('mines')) {
-      return SHOWCASE_GAMES.find((g) => g.id === 'mines') || SHOWCASE_GAMES[0];
-    }
-    return SHOWCASE_GAMES[0]; // Fortune Tiger padrão
-  })();
-
-  const handleRegisterAndPlay = (gameId?: string) => {
     try {
       if ((window as any).fbq) {
-        (window as any).fbq('track', 'Lead', { content_name: gameId || 'FuturoBet_Landing' });
-        (window as any).fbq('track', 'InitiateCheckout', { content_name: 'Cadastro_FuturoBet' });
+        (window as any).fbq('track', 'Lead', { content_name: 'FuturoBet_GooglePlay_Install' });
+        (window as any).fbq('track', 'InitiateCheckout', { content_name: 'Instalar_App_FuturoBet' });
       }
     } catch (e) {
       // ignore
     }
-    localStorage.setItem('fb_presell_dismissed', 'true');
-    onEnterCasino({ directRegister: true, directGame: gameId || featuredGame.id });
+
+    setIsInstalling(true);
+    setInstallStatus('Pendente...');
+    setInstallProgress(15);
+
+    setTimeout(() => {
+      setInstallStatus('Baixando 28,4 MB (45%)...');
+      setInstallProgress(45);
+    }, 400);
+
+    setTimeout(() => {
+      setInstallStatus('Baixando 28,4 MB (88%)...');
+      setInstallProgress(88);
+    }, 800);
+
+    setTimeout(() => {
+      setInstallStatus('Instalando...');
+      setInstallProgress(100);
+    }, 1200);
+
+    setTimeout(() => {
+      setInstallStatus('Abrindo FuturoBet Oficial...');
+      localStorage.setItem('fb_presell_dismissed', 'true');
+      onEnterCasino({ directRegister: true, directGame: gameIdParam || 'fortune-tiger' });
+    }, 1600);
   };
 
-  const handleLoginDirect = () => {
+  const handleWebAccess = () => {
     localStorage.setItem('fb_presell_dismissed', 'true');
-    onEnterCasino({ directRegister: false });
+    onEnterCasino({ directRegister: false, directGame: gameIdParam || undefined });
   };
-
-  const filteredGames = SHOWCASE_GAMES.filter((g) => {
-    if (selectedCategory === 'todos') return true;
-    return g.category === selectedCategory;
-  });
 
   return (
-    <div className="w-full min-h-screen min-h-[100dvh] bg-[#060a14] text-slate-100 flex justify-center items-start font-sans antialiased selection:bg-amber-400 selection:text-black">
-      {/* Container Mobile Centralizado com layout de alta conversão */}
-      <div className="w-full max-w-md min-h-screen min-h-[100dvh] bg-[#080d1a] flex flex-col justify-between relative sm:border-x border-slate-800/80 shadow-[0_0_50px_rgba(0,0,0,0.9)] pb-24">
+    <div className="w-full min-h-screen min-h-[100dvh] bg-[#111315] text-[#e3e3e3] flex justify-center items-start font-sans antialiased selection:bg-[#01875f] selection:text-white">
+      {/* Container Mobile Centralizado idêntico ao Google Play Store Dark Mode */}
+      <div className="w-full max-w-md min-h-screen min-h-[100dvh] bg-[#111315] flex flex-col justify-between relative sm:border-x border-[#2b2e33] shadow-2xl pb-16">
         
-        {/* 1. TOPO OFICIAL FUTUROBET (LOGO + SUPORTE + ENTRAR) */}
-        <header className="w-full px-4 py-3 flex items-center justify-between border-b border-amber-500/20 bg-[#070b16]/95 sticky top-0 z-40 backdrop-blur-md">
-          {/* Logo Oficial FuturoBet */}
-          <div 
-            onClick={handleLoginDirect}
-            className="flex items-center cursor-pointer select-none group"
-          >
-            <div className="flex items-center font-black text-2xl tracking-tighter uppercase font-sans leading-none">
-              <span className="text-white drop-shadow-[0_2px_10px_rgba(255,255,255,0.3)]">
-                FUTURO
-              </span>
-              <span className="text-amber-400 drop-shadow-[0_2px_12px_rgba(251,191,36,0.6)] ml-0.5">
-                BET
+        {/* 1. BARRA SUPERIOR GOOGLE PLAY OFICIAL */}
+        <header className="w-full px-4 py-3 flex items-center justify-between border-b border-[#24272c] bg-[#111315]/95 sticky top-0 z-40 backdrop-blur-md">
+          {/* Logo do Google Play */}
+          <div className="flex items-center gap-2 select-none">
+            {/* Ícone triangular característico Google Play */}
+            <svg className="w-5 h-5 flex-shrink-0" viewBox="0 0 40 40" fill="none">
+              <path d="M7.4 3.7C6.8 4.4 6.5 5.4 6.5 6.7V33.3C6.5 34.6 6.8 35.6 7.4 36.3L7.5 36.4L25.3 18.6V18.2L7.5 3.6L7.4 3.7Z" fill="#00D3FF"/>
+              <path d="M31.2 24.5L25.3 18.6V18.2L31.2 12.3L31.4 12.4L38.4 16.4C40.4 17.5 40.4 19.3 38.4 20.4L31.4 24.4L31.2 24.5Z" fill="#FFCE00"/>
+              <path d="M31.4 24.4L25.3 18.4L7.4 36.3C8.1 37 9.2 37.1 10.5 36.4L31.4 24.4Z" fill="#FF375F"/>
+              <path d="M31.4 12.4L10.5 0.4C9.2 -0.3 8.1 -0.2 7.4 0.5L25.3 18.4L31.4 12.4Z" fill="#00E676"/>
+            </svg>
+            <div className="flex items-center gap-1.5 font-sans">
+              <span className="text-white text-sm font-bold tracking-tight">Google Play</span>
+              <span className="text-[#9aa0a6] text-xs font-normal">•</span>
+              <span className="text-[#00a86b] text-xs font-semibold flex items-center gap-1">
+                <CheckCircle2 size={12} className="text-[#00a86b]" />
+                Oficial
               </span>
             </div>
-            <span className="ml-2 px-1.5 py-0.5 rounded bg-amber-400/10 border border-amber-400/30 text-[9px] font-bold text-amber-400 uppercase tracking-widest hidden sm:inline-block">
-              OFICIAL
-            </span>
           </div>
 
-          {/* Ações Rápidas: Suporte 24h e Botão Entrar */}
-          <div className="flex items-center gap-2">
-            <a
-              href={whatsappUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-bold hover:bg-emerald-500/20 transition active:scale-95"
-              title="Falar com Suporte Oficial 24h"
-            >
-              <MessageCircle size={14} className="text-emerald-400" />
-              <span className="hidden xs:inline">Suporte</span>
-            </a>
-
-            <button
-              onClick={handleLoginDirect}
-              className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-bold text-slate-200 transition active:scale-95 cursor-pointer"
-            >
-              Entrar
-            </button>
-          </div>
+          {/* Atalho Acessar Web */}
+          <button
+            onClick={handleWebAccess}
+            className="text-xs font-semibold text-[#8ab4f8] hover:text-[#aecbfa] flex items-center gap-0.5 px-2 py-1 rounded hover:bg-[#1f2328] transition cursor-pointer"
+          >
+            <span>Acessar Web</span>
+            <ChevronRight size={14} />
+          </button>
         </header>
 
-        {/* 2. TICKER DE CONFIANÇA & GANHADORES RECENTES */}
-        <div className="w-full bg-gradient-to-r from-amber-500/10 via-amber-500/20 to-amber-500/10 border-b border-amber-500/20 px-4 py-1.5 flex items-center justify-between text-[11px] overflow-hidden">
-          <div className="flex items-center gap-1.5 text-amber-400 font-bold">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping inline-block" />
-            <span className="uppercase tracking-wider text-[10px]">Saques em tempo real:</span>
-          </div>
-          <div className="text-slate-300 font-medium truncate ml-2 flex items-center gap-1">
-            <span className="text-white font-bold">{RECENT_WINNERS[activeWinnerIndex].name}</span>
-            <span>sacou</span>
-            <span className="text-emerald-400 font-bold">{RECENT_WINNERS[activeWinnerIndex].amount}</span>
-            <span className="text-slate-500 text-[10px]">({RECENT_WINNERS[activeWinnerIndex].time})</span>
-          </div>
-        </div>
-
-        {/* 3. HERO SECTION DE ALTA CONVERSÃO COM BLINDAGEM META ADS */}
+        {/* CONTEÚDO PRINCIPAL DO APP */}
         <div className="px-4 pt-4 pb-2 space-y-4">
           
-          {/* Badge de Autoridade e Conformidade */}
-          <div className="flex items-center justify-between">
-            <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-[11px] font-bold">
-              <ShieldCheck size={14} className="text-emerald-400" />
-              <span>Plataforma Oficial Verificada</span>
+          {/* 2. CABEÇALHO DO APLICATIVO (ÍCONE + TÍTULO + DESENVOLVEDOR + PLAY PROTECT) */}
+          <div className="flex items-start gap-4">
+            {/* Ícone Oficial do App FuturoBet */}
+            <div className="w-[78px] h-[78px] rounded-2xl overflow-hidden shadow-lg border border-[#2e3238] flex-shrink-0 bg-black relative">
+              <img 
+                src={appIconImg} 
+                alt="FuturoBet Oficial App"
+                className="w-full h-full object-cover"
+              />
             </div>
-            <div className="flex items-center gap-1 text-[11px] font-bold text-amber-400">
-              <Star size={13} className="fill-amber-400 text-amber-400" />
-              <span>4.9 ★ (380K+ Jogadores)</span>
+
+            {/* Informações do App */}
+            <div className="flex-1 min-w-0">
+              <h1 className="text-xl font-bold text-white tracking-tight leading-snug">
+                FuturoBet: Jogos e Cassino
+              </h1>
+              <p className="text-xs text-[#00a86b] font-semibold mt-0.5 tracking-wide">
+                FUTUROBET GAMING OFICIAL
+              </p>
+              <div className="flex items-center gap-1 text-[11px] text-[#9aa0a6] mt-1">
+                <ShieldCheck size={13} className="text-[#00a86b] flex-shrink-0" />
+                <span className="truncate">Verificado pelo Play Protect</span>
+              </div>
             </div>
           </div>
 
-          {/* Headline Forte e Segura */}
-          <div className="space-y-1.5">
-            <h1 className="text-2xl sm:text-[26px] font-black text-white tracking-tight leading-tight">
-              O Maior Hub de <span className="text-transparent bg-clip-text bg-gradient-to-r from-amber-400 to-yellow-200">Entretenimento Online</span> do Brasil
-            </h1>
-            <p className="text-xs text-slate-300 leading-relaxed">
-              Mais de 200 jogos exclusivos, saques imediatos via PIX e bônus de 100% no seu 1º depósito. Plataforma estável, segura e auditada.
+          {/* 3. MÉTRICAS OFICIAIS DA PLAY STORE (AVALIAÇÃO, DOWNLOADS, CLASSIFICAÇÃO) */}
+          <div className="flex items-center justify-between py-2 border-y border-[#24272c] text-center">
+            {/* Avaliação */}
+            <div className="flex-1 px-1">
+              <div className="flex items-center justify-center gap-1 font-bold text-sm text-white">
+                <span>4,9</span>
+                <Star size={13} className="fill-[#e8eaed] text-[#e8eaed]" />
+              </div>
+              <div className="text-[11px] text-[#9aa0a6] mt-0.5">380 mil avaliações</div>
+            </div>
+
+            <div className="w-[1px] h-7 bg-[#24272c]" />
+
+            {/* Downloads */}
+            <div className="flex-1 px-1">
+              <div className="font-bold text-sm text-white">50 mi+</div>
+              <div className="text-[11px] text-[#9aa0a6] mt-0.5">Downloads</div>
+            </div>
+
+            <div className="w-[1px] h-7 bg-[#24272c]" />
+
+            {/* Classificação Indicativa */}
+            <div className="flex-1 px-1 flex flex-col items-center">
+              <div className="w-5 h-5 rounded border border-[#9aa0a6] flex items-center justify-center text-[10px] font-black text-white bg-black/40">
+                18+
+              </div>
+              <div className="text-[11px] text-[#9aa0a6] mt-0.5">Não recomendado - 18</div>
+            </div>
+          </div>
+
+          {/* 4. BOTÃO PRINCIPAL DE INSTALAÇÃO (PADRÃO GOOGLE PLAY STORE) */}
+          <div className="space-y-2 pt-1">
+            <button
+              onClick={handleInstallClick}
+              disabled={isInstalling}
+              className={`w-full py-3 px-6 rounded-full font-semibold text-sm transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer shadow-md ${
+                isInstalling 
+                  ? 'bg-[#005f3e] text-white cursor-wait' 
+                  : 'bg-[#01875f] hover:bg-[#007451] active:bg-[#005f3e] text-white hover:shadow-[0_4px_15px_rgba(1,135,95,0.4)]'
+              }`}
+            >
+              {isInstalling ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  <span>{installStatus}</span>
+                </>
+              ) : (
+                <>
+                  <Download size={17} />
+                  <span>Instalar</span>
+                </>
+              )}
+            </button>
+
+            {/* Barra de Progresso Realista caso esteja instalando */}
+            {isInstalling && (
+              <div className="w-full bg-[#24272c] h-1.5 rounded-full overflow-hidden">
+                <div 
+                  className="bg-[#00a86b] h-full transition-all duration-300 ease-out" 
+                  style={{ width: `${installProgress}%` }}
+                />
+              </div>
+            )}
+
+            {/* Selos de Confirmação */}
+            <div className="flex items-center justify-between text-[11px] text-[#9aa0a6] px-1 pt-0.5">
+              <div className="flex items-center gap-1.5">
+                <Check size={13} className="text-[#00a86b]" />
+                <span>Download 100% Gratuito</span>
+              </div>
+              <div>
+                <span>Tamanho: 28,4 MB</span>
+              </div>
+            </div>
+          </div>
+
+          {/* 5. DESTAQUES DO APLICATIVO (CARROSSEL DE TELAS E RECURSOS) */}
+          <div className="space-y-2 pt-3 border-t border-[#24272c]">
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm font-bold text-white tracking-wide">
+                DESTAQUES DO APLICATIVO
+              </h2>
+              <span className="text-[11px] text-[#9aa0a6]">4 telas</span>
+            </div>
+
+            {/* Carrossel de screenshots do app com proporção vertical */}
+            <div className="flex gap-2.5 overflow-x-auto pb-2 scrollbar-none snap-x">
+              
+              {/* Tela 1: Roleta da Sorte Grátis */}
+              <div 
+                onClick={handleInstallClick}
+                className="w-44 h-72 rounded-2xl overflow-hidden border border-[#2b2e33] flex-shrink-0 relative cursor-pointer snap-start bg-[#181a1e] group"
+              >
+                <img 
+                  src={promoRoletaImg} 
+                  alt="Roleta da Sorte Grátis"
+                  className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-black/40" />
+                
+                <div className="absolute top-2.5 left-2.5 px-2 py-0.5 bg-[#00a86b] text-black font-black text-[9px] rounded-full uppercase">
+                  GRÁTIS HOJE
+                </div>
+
+                <div className="absolute bottom-2.5 left-2.5 right-2.5 text-white">
+                  <div className="text-[11px] text-amber-300 font-bold uppercase tracking-wide">
+                    Roleta da Sorte
+                  </div>
+                  <div className="text-xs font-bold leading-tight mt-0.5">
+                    1 Giro Grátis Todo Dia com Prêmios no PIX
+                  </div>
+                </div>
+              </div>
+
+              {/* Tela 2: Mais de 200 Jogos e Slots */}
+              <div 
+                onClick={handleInstallClick}
+                className="w-44 h-72 rounded-2xl overflow-hidden border border-[#2b2e33] flex-shrink-0 relative cursor-pointer snap-start bg-[#181a1e] group"
+              >
+                <img 
+                  src={gamesScreenImg} 
+                  alt="Biblioteca de Jogos FuturoBet"
+                  className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-black/40" />
+                
+                <div className="absolute top-2.5 left-2.5 px-2 py-0.5 bg-[#01875f] text-white font-bold text-[9px] rounded-full uppercase">
+                  +200 JOGOS
+                </div>
+
+                <div className="absolute bottom-2.5 left-2.5 right-2.5 text-white">
+                  <div className="text-[11px] text-[#8ab4f8] font-bold uppercase tracking-wide">
+                    Catálogo Completo
+                  </div>
+                  <div className="text-xs font-bold leading-tight mt-0.5">
+                    Tiger, Ox, Mines, 777 Rush & Roletas
+                  </div>
+                </div>
+              </div>
+
+              {/* Tela 3: Bônus VIP & Saque PIX */}
+              <div 
+                onClick={handleInstallClick}
+                className="w-44 h-72 rounded-2xl overflow-hidden border border-[#2b2e33] flex-shrink-0 relative cursor-pointer snap-start bg-[#181a1e] group"
+              >
+                <img 
+                  src={promoTigerImg} 
+                  alt="Bônus VIP e Saques Imediatos"
+                  className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-black/40" />
+                
+                <div className="absolute top-2.5 left-2.5 px-2 py-0.5 bg-amber-500 text-black font-black text-[9px] rounded-full uppercase">
+                  BÔNUS VIP
+                </div>
+
+                <div className="absolute bottom-2.5 left-2.5 right-2.5 text-white">
+                  <div className="text-[11px] text-amber-400 font-bold uppercase tracking-wide">
+                    100% de Bônus
+                  </div>
+                  <div className="text-xs font-bold leading-tight mt-0.5">
+                    Saques imediatos via PIX em até 10 segundos
+                  </div>
+                </div>
+              </div>
+
+              {/* Tela 4: Indique e Ganhe & Clube de Afiliados */}
+              <div 
+                onClick={handleInstallClick}
+                className="w-44 h-72 rounded-2xl overflow-hidden border border-[#2b2e33] flex-shrink-0 relative cursor-pointer snap-start bg-[#181a1e] group"
+              >
+                <img 
+                  src={oxSlotImg} 
+                  alt="Programa de Afiliados e Indicação"
+                  className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-black/40" />
+                
+                <div className="absolute top-2.5 left-2.5 px-2 py-0.5 bg-purple-500 text-white font-black text-[9px] rounded-full uppercase">
+                  INDIQUE & GANHE
+                </div>
+
+                <div className="absolute bottom-2.5 left-2.5 right-2.5 text-white">
+                  <div className="text-[11px] text-purple-300 font-bold uppercase tracking-wide">
+                    Comissão Vitalícia
+                  </div>
+                  <div className="text-xs font-bold leading-tight mt-0.5">
+                    5% sobre movimentação com saques diários
+                  </div>
+                </div>
+              </div>
+
+            </div>
+          </div>
+
+          {/* 6. SEÇÃO "SOBRE ESTE APLICATIVO" (TEXTO SEGURO E CONVERSIVO PARA O META) */}
+          <div className="pt-3 border-t border-[#24272c] space-y-2">
+            <div 
+              onClick={() => setShowFullDescription(!showFullDescription)}
+              className="flex items-center justify-between cursor-pointer group"
+            >
+              <h2 className="text-sm font-bold text-white tracking-wide">
+                Sobre este aplicativo
+              </h2>
+              <ChevronRight 
+                size={18} 
+                className={`text-[#9aa0a6] group-hover:text-white transition-transform ${showFullDescription ? 'rotate-90' : ''}`} 
+              />
+            </div>
+
+            <div className="text-xs text-[#bdc1c6] leading-relaxed space-y-2 font-normal">
+              <p>
+                O aplicativo oficial <strong>FuturoBet</strong> traz a mais completa experiência de jogos mobile e entretenimento interativo do Brasil! Desfrute de uma biblioteca completa com mais de 200 títulos consagrados, incluindo Fortune Tiger, Fortune Ox, 777 Rush, Mines e mesas ao vivo.
+              </p>
+              
+              {showFullDescription ? (
+                <>
+                  <p>
+                    🌟 <strong>Vantagens exclusivas do App Oficial:</strong>
+                  </p>
+                  <ul className="list-disc list-inside space-y-1 pl-1 text-[#9aa0a6]">
+                    <li>Roleta da Sorte com giros gratuitos diários para membros ativos.</li>
+                    <li>Depósitos e saques instantâneos via PIX (processados em poucos segundos).</li>
+                    <li>Bônus exclusivo de 100% no seu primeiro depósito com saldo dobrado.</li>
+                    <li>Programa oficial de afiliados com comissões contínuas no PIX.</li>
+                    <li>Suporte humanizado 24 horas por dia em português via WhatsApp e Chat.</li>
+                  </ul>
+                  <p>
+                    Segurança máxima com criptografia de ponta a ponta e jogos certificados. Baixe agora e comece a jogar em menos de 1 minuto!
+                  </p>
+                </>
+              ) : (
+                <p className="text-[#9aa0a6]">
+                  Aproveite rodadas diárias na Roleta da Sorte, saques automáticos via PIX, suporte 24h e o melhor programa de indicação do mercado...{' '}
+                  <span 
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setShowFullDescription(true);
+                    }}
+                    className="text-[#8ab4f8] font-semibold cursor-pointer"
+                  >
+                    Ler mais
+                  </span>
+                </p>
+              )}
+            </div>
+
+            {/* Tags do App */}
+            <div className="flex flex-wrap gap-1.5 pt-2">
+              <span className="px-2.5 py-1 rounded-lg bg-[#24272c] text-[11px] text-[#bdc1c6] font-medium">
+                Cassino & Slots
+              </span>
+              <span className="px-2.5 py-1 rounded-lg bg-[#24272c] text-[11px] text-[#bdc1c6] font-medium">
+                Entretenimento
+              </span>
+              <span className="px-2.5 py-1 rounded-lg bg-[#24272c] text-[11px] text-[#bdc1c6] font-medium">
+                Jogos Rápidos
+              </span>
+              <span className="px-2.5 py-1 rounded-lg bg-[#24272c] text-[11px] text-[#bdc1c6] font-medium">
+                Saque PIX
+              </span>
+            </div>
+          </div>
+
+          {/* 7. SEGURANÇA DOS DADOS (BLINDAGEM OFICIAL PADRÃO GOOGLE PLAY) */}
+          <div className="pt-3 border-t border-[#24272c] space-y-2">
+            <h2 className="text-sm font-bold text-white tracking-wide">
+              Segurança dos dados
+            </h2>
+            <p className="text-[11px] text-[#9aa0a6] leading-relaxed">
+              A segurança começa com o entendimento de como os desenvolvedores coletam e compartilham seus dados. As práticas de privacidade e segurança podem variar de acordo com o uso.
+            </p>
+
+            <div className="p-3 bg-[#181a1e] rounded-xl border border-[#24272c] space-y-2.5 text-xs text-[#bdc1c6]">
+              <div className="flex items-center gap-2.5">
+                <ShieldCheck size={16} className="text-[#00a86b] flex-shrink-0" />
+                <span>Nenhum dado financeiro sensível é repassado a terceiros</span>
+              </div>
+              <div className="flex items-center gap-2.5">
+                <Lock size={16} className="text-[#00a86b] flex-shrink-0" />
+                <span>Dados criptografados em trânsito com segurança SSL 256-Bit</span>
+              </div>
+              <div className="flex items-center gap-2.5">
+                <CheckCircle2 size={16} className="text-[#00a86b] flex-shrink-0" />
+                <span>Protegido e verificado com Google Play Protect</span>
+              </div>
+            </div>
+          </div>
+
+          {/* 8. AVALIAÇÕES E OPINIÕES (PROVA SOCIAL ALTA CONVERSÃO) */}
+          <div className="pt-3 border-t border-[#24272c] space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-sm font-bold text-white tracking-wide">
+                  Avaliações e opiniões
+                </h2>
+                <div className="flex items-center gap-2 mt-1">
+                  <span className="text-2xl font-bold text-white">4,9</span>
+                  <div>
+                    <div className="flex text-[#e8eaed]">
+                      {[1, 2, 3, 4, 5].map((s) => (
+                        <Star key={s} size={13} className="fill-[#e8eaed]" />
+                      ))}
+                    </div>
+                    <span className="text-[10px] text-[#9aa0a6]">380.412 avaliações</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Avaliação 1 */}
+            <div className="p-3 bg-[#181a1e] rounded-xl border border-[#24272c] space-y-1.5 text-xs">
+              <div className="flex items-center justify-between">
+                <span className="font-semibold text-white">Carlos Eduardo M.</span>
+                <span className="text-[10px] text-[#9aa0a6]">Há 1 dia</span>
+              </div>
+              <div className="flex text-[#e8eaed]">
+                {[1, 2, 3, 4, 5].map((s) => (
+                  <Star key={s} size={11} className="fill-[#e8eaed]" />
+                ))}
+              </div>
+              <p className="text-[#bdc1c6] text-[11px] leading-relaxed">
+                App sensacional! O melhor cassino que já joguei. Fiz meu primeiro saque de R$ 850 via PIX e caiu na conta em menos de 10 segundos. Recomendo demais!
+              </p>
+            </div>
+
+            {/* Avaliação 2 */}
+            <div className="p-3 bg-[#181a1e] rounded-xl border border-[#24272c] space-y-1.5 text-xs">
+              <div className="flex items-center justify-between">
+                <span className="font-semibold text-white">Larissa Santos</span>
+                <span className="text-[10px] text-[#9aa0a6]">Há 3 dias</span>
+              </div>
+              <div className="flex text-[#e8eaed]">
+                {[1, 2, 3, 4, 5].map((s) => (
+                  <Star key={s} size={11} className="fill-[#e8eaed]" />
+                ))}
+              </div>
+              <p className="text-[#bdc1c6] text-[11px] leading-relaxed">
+                Jogos rodam muito liso sem travar nada. A roleta diária gratuita é top, todo dia entro pra girar e o suporte no WhatsApp me atendeu muito rápido.
+              </p>
+            </div>
+          </div>
+
+          {/* 9. INFORMAÇÕES DO APLICATIVO */}
+          <div className="pt-3 border-t border-[#24272c] space-y-2 text-xs">
+            <h2 className="text-sm font-bold text-white tracking-wide">
+              Informações do aplicativo
+            </h2>
+
+            <div className="grid grid-cols-2 gap-2.5 text-[11px] text-[#9aa0a6]">
+              <div>
+                <span className="block text-white font-medium">Versão</span>
+                <span>4.8.2 (Estável)</span>
+              </div>
+              <div>
+                <span className="block text-white font-medium">Atualizado em</span>
+                <span>06 de set. de 2026</span>
+              </div>
+              <div>
+                <span className="block text-white font-medium">Downloads</span>
+                <span>50.000.000+</span>
+              </div>
+              <div>
+                <span className="block text-white font-medium">Tamanho</span>
+                <span>28,4 MB</span>
+              </div>
+              <div>
+                <span className="block text-white font-medium">Oferecido por</span>
+                <span className="text-[#00a86b] font-semibold">FUTUROBET OFICIAL</span>
+              </div>
+              <div>
+                <span className="block text-white font-medium">Requisitos</span>
+                <span>Android 7.0 ou sup.</span>
+              </div>
+            </div>
+          </div>
+
+          {/* 10. SUPORTE OFICIAL & CONTATO */}
+          <div className="pt-3 border-t border-[#24272c] space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-white">Contato do desenvolvedor</span>
+              <a
+                href={whatsappUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs font-semibold text-[#00a86b] hover:underline flex items-center gap-1"
+              >
+                <MessageCircle size={13} />
+                <span>WhatsApp 24h</span>
+              </a>
+            </div>
+            <p className="text-[11px] text-[#9aa0a6]">
+              Precisa de ajuda ou suporte técnico? Central de Atendimento 24h via WhatsApp: <strong>(42) 99968-7965</strong>.
             </p>
           </div>
 
-          {/* Card em Destaque do Jogo de Entrada (com botão de ação rápida) */}
-          <div className="relative rounded-2xl overflow-hidden border border-amber-500/40 bg-gradient-to-b from-[#131b2e] to-[#0d1322] p-3.5 shadow-[0_10px_30px_rgba(0,0,0,0.6)]">
-            <div className="flex items-center gap-3">
-              <div className="relative w-18 h-18 sm:w-20 sm:h-20 rounded-xl overflow-hidden border border-amber-400/40 shadow-lg flex-shrink-0 bg-slate-900">
-                <img 
-                  src={featuredGame.image} 
-                  alt={featuredGame.name}
-                  className="w-full h-full object-cover"
-                />
-                <div className="absolute top-1 left-1 px-1 py-0.2 bg-amber-500 text-black text-[8px] font-black rounded uppercase">
-                  {featuredGame.badge}
-                </div>
-              </div>
-
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-1 text-[10px] font-bold text-amber-400 uppercase tracking-wide">
-                  <Zap size={11} className="text-amber-400" />
-                  <span>Destaque da Rodada</span>
-                </div>
-                <h2 className="text-lg font-black text-white truncate leading-tight mt-0.5">
-                  {featuredGame.name}
-                </h2>
-                <div className="flex items-center gap-2 text-xs text-slate-400 mt-1">
-                  <span className="text-[11px] font-semibold text-slate-300">{featuredGame.provider}</span>
-                  <span>•</span>
-                  <span className="text-[11px] text-emerald-400 font-bold">RTP {featuredGame.rtp}</span>
-                </div>
-              </div>
-            </div>
-
-            {/* CTA Principal de Cadastro */}
-            <div className="mt-3 pt-3 border-t border-slate-700/60 flex items-center gap-2">
-              <button
-                onClick={() => handleRegisterAndPlay(featuredGame.id)}
-                className="flex-1 py-3 px-4 bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-black font-black text-xs sm:text-sm uppercase tracking-wide rounded-xl shadow-[0_4px_20px_rgba(245,158,11,0.4)] active:scale-[0.98] transition-all flex items-center justify-center gap-1.5 cursor-pointer"
-              >
-                <span>CRIAR CONTA & JOGAR AGORA</span>
-                <ArrowRight size={16} />
-              </button>
-            </div>
-          </div>
-
-          {/* 4 Destaques Rápidos da Plataforma */}
-          <div className="grid grid-cols-2 gap-2 text-xs">
-            <div className="p-2.5 bg-slate-900/60 rounded-xl border border-slate-800/80 flex items-center gap-2">
-              <div className="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 flex-shrink-0">
-                <Zap size={16} />
-              </div>
-              <div>
-                <span className="text-[10px] text-slate-400 block font-medium">Saque Instantâneo</span>
-                <span className="font-bold text-white text-[11px]">Via PIX em 10s</span>
-              </div>
-            </div>
-
-            <div className="p-2.5 bg-slate-900/60 rounded-xl border border-slate-800/80 flex items-center gap-2">
-              <div className="w-8 h-8 rounded-lg bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 flex-shrink-0">
-                <Gift size={16} />
-              </div>
-              <div>
-                <span className="text-[10px] text-slate-400 block font-medium">Bônus Boas-Vindas</span>
-                <span className="font-bold text-white text-[11px]">100% no 1º PIX</span>
-              </div>
-            </div>
-
-            <div className="p-2.5 bg-slate-900/60 rounded-xl border border-slate-800/80 flex items-center gap-2">
-              <div className="w-8 h-8 rounded-lg bg-blue-500/10 border border-blue-500/30 flex items-center justify-center text-blue-400 flex-shrink-0">
-                <Users size={16} />
-              </div>
-              <div>
-                <span className="text-[10px] text-slate-400 block font-medium">Indique & Ganhe</span>
-                <span className="font-bold text-white text-[11px]">Comissão Diária</span>
-              </div>
-            </div>
-
-            <div className="p-2.5 bg-slate-900/60 rounded-xl border border-slate-800/80 flex items-center gap-2">
-              <div className="w-8 h-8 rounded-lg bg-purple-500/10 border border-purple-500/30 flex items-center justify-center text-purple-400 flex-shrink-0">
-                <Lock size={16} />
-              </div>
-              <div>
-                <span className="text-[10px] text-slate-400 block font-medium">Segurança Máxima</span>
-                <span className="font-bold text-white text-[11px]">SSL 256-Bit</span>
-              </div>
-            </div>
-          </div>
-
         </div>
 
-        {/* 4. VITRINE DE JOGOS: MOSTRA QUE É UM CASSINO COMPLETO DE +200 JOGOS */}
-        <div className="px-4 py-3 space-y-3 border-t border-slate-800/80">
-          <div className="flex items-center justify-between">
-            <div>
-              <span className="text-xs font-bold text-amber-400 uppercase tracking-wider block">
-                Catálogo Completo
-              </span>
-              <h3 className="text-base font-black text-white">
-                Mais de 200 Jogos Disponíveis
-              </h3>
-            </div>
-            <button
-              onClick={() => handleRegisterAndPlay()}
-              className="text-xs font-bold text-blue-400 hover:text-blue-300 flex items-center gap-0.5 cursor-pointer"
-            >
-              <span>Ver todos</span>
-              <ChevronRight size={14} />
-            </button>
-          </div>
-
-          {/* Filtros de Categoria da Vitrine */}
-          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
-            {[
-              { id: 'todos', label: 'Todos (+200)' },
-              { id: 'slots', label: 'Slots Populares 🔥' },
-              { id: 'crash', label: 'Mines & Crash 💣' },
-              { id: 'novos', label: 'Lançamentos 🚀' },
-            ].map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => setSelectedCategory(tab.id as any)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition cursor-pointer ${
-                  selectedCategory === tab.id
-                    ? 'bg-amber-400 text-black shadow-md'
-                    : 'bg-slate-800/80 text-slate-300 hover:bg-slate-700'
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
-
-          {/* Grade de Jogos */}
-          <div className="grid grid-cols-2 gap-2.5">
-            {filteredGames.slice(0, 6).map((game) => (
-              <div
-                key={game.id}
-                onClick={() => handleRegisterAndPlay(game.id)}
-                className="group relative rounded-xl overflow-hidden bg-slate-900/90 border border-slate-800 hover:border-amber-400/60 transition duration-200 cursor-pointer shadow-md flex flex-col justify-between"
-              >
-                {/* Imagem do Jogo */}
-                <div className="h-28 w-full relative overflow-hidden bg-slate-950">
-                  <img
-                    src={game.image}
-                    alt={game.name}
-                    className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
-                    loading="lazy"
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black via-black/20 to-transparent" />
-                  
-                  {/* Badge */}
-                  <div className="absolute top-1.5 left-1.5 px-1.5 py-0.5 bg-black/70 backdrop-blur-sm border border-amber-400/40 text-amber-400 text-[9px] font-black rounded">
-                    {game.badge}
-                  </div>
-
-                  {/* Multiplicador */}
-                  <div className="absolute bottom-1.5 right-1.5 text-[10px] font-black text-amber-300 drop-shadow">
-                    {game.multiplier}
-                  </div>
-                </div>
-
-                {/* Info do Jogo */}
-                <div className="p-2.5 space-y-1">
-                  <h4 className="text-xs font-bold text-white truncate leading-tight group-hover:text-amber-400 transition">
-                    {game.name}
-                  </h4>
-                  <div className="flex items-center justify-between text-[10px] text-slate-400">
-                    <span className="truncate">{game.provider}</span>
-                    <span className="text-emerald-400 font-semibold">{game.rtp}</span>
-                  </div>
-
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleRegisterAndPlay(game.id);
-                    }}
-                    className="w-full mt-1.5 py-1.5 bg-slate-800 group-hover:bg-amber-400 text-slate-200 group-hover:text-black font-bold text-[11px] rounded-lg transition flex items-center justify-center gap-1 cursor-pointer"
-                  >
-                    <Play size={11} className="fill-current" />
-                    <span>Jogar</span>
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          <div className="pt-1">
-            <button
-              onClick={() => handleRegisterAndPlay()}
-              className="w-full py-2.5 bg-slate-800/80 hover:bg-slate-800 text-slate-300 hover:text-white font-bold text-xs rounded-xl border border-slate-700/80 transition flex items-center justify-center gap-1.5 cursor-pointer"
-            >
-              <span>Acessar Biblioteca com +200 Jogos</span>
-              <ArrowRight size={14} />
-            </button>
-          </div>
-        </div>
-
-        {/* 5. SEÇÃO: PROGRAMA DE INDICAÇÃO (CONVIDE & GANHE) */}
-        <div className="px-4 py-4 space-y-3 border-t border-slate-800/80 bg-gradient-to-b from-[#0b1222] to-[#080d1a]">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-xl bg-amber-400/10 border border-amber-400/30 flex items-center justify-center text-amber-400">
-              <Users size={16} />
-            </div>
-            <div>
-              <span className="text-[10px] font-bold text-amber-400 uppercase tracking-wider block">
-                Programa de Afiliados
-              </span>
-              <h3 className="text-sm font-black text-white">
-                Indique Amigos e Ganhe Comissões
-              </h3>
-            </div>
-          </div>
-
-          <p className="text-xs text-slate-300 leading-relaxed">
-            Compartilhe seu link exclusivo com amigos, grupos e redes sociais. Receba até <strong className="text-amber-400">5% de comissão contínua</strong> sobre a movimentação dos seus convidados com saques diretos no PIX.
-          </p>
-
-          <div className="grid grid-cols-3 gap-2 text-center text-xs">
-            <div className="p-2 bg-slate-900/80 rounded-xl border border-slate-800/80">
-              <span className="text-amber-400 font-black text-sm block">1</span>
-              <span className="text-[10px] text-slate-300 leading-tight block mt-0.5">Cadastre-se na FuturoBet</span>
-            </div>
-            <div className="p-2 bg-slate-900/80 rounded-xl border border-slate-800/80">
-              <span className="text-amber-400 font-black text-sm block">2</span>
-              <span className="text-[10px] text-slate-300 leading-tight block mt-0.5">Pegue seu link de convite</span>
-            </div>
-            <div className="p-2 bg-slate-900/80 rounded-xl border border-slate-800/80">
-              <span className="text-amber-400 font-black text-sm block">3</span>
-              <span className="text-[10px] text-slate-300 leading-tight block mt-0.5">Receba no PIX diariamente</span>
-            </div>
-          </div>
-
-          <button
-            onClick={() => handleRegisterAndPlay()}
-            className="w-full py-2.5 bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-black font-black text-xs uppercase tracking-wider rounded-xl transition shadow-md flex items-center justify-center gap-1.5 cursor-pointer"
-          >
-            <span>QUERO SER UM AFILIADO FUTUROBET</span>
-            <ArrowRight size={14} />
-          </button>
-        </div>
-
-        {/* 6. SEÇÃO: SUPORTE AO VIVO 24H */}
-        <div className="px-4 py-4 space-y-3 border-t border-slate-800/80">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
-                <MessageCircle size={16} />
-              </div>
-              <div>
-                <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider block">
-                  Atendimento Oficial
-                </span>
-                <h3 className="text-sm font-black text-white">
-                  Suporte Humanizado 24 Horas
-                </h3>
-              </div>
-            </div>
-            <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 text-[10px] font-bold flex items-center gap-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-              Online Agora
-            </span>
-          </div>
-
-          <p className="text-xs text-slate-300 leading-relaxed">
-            Dúvidas sobre depósitos via PIX, resgate de saques ou bônus? Nossa equipe de atendimento está pronta para te atender imediatamente via WhatsApp ou Chat Oficial.
-          </p>
-
-          <a
-            href={whatsappUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl transition flex items-center justify-center gap-2 cursor-pointer shadow-[0_4px_15px_rgba(16,185,129,0.3)]"
-          >
-            <MessageCircle size={15} />
-            <span>Chamar Atendente no WhatsApp (42 99968-7965)</span>
-          </a>
-        </div>
-
-        {/* 7. BLINDAGEM META ADS: JOGO RESPONSÁVEL, TERMOS E PRIVACIDADE */}
-        <div className="px-4 py-4 space-y-3 border-t border-slate-800/80 bg-[#050810] text-[11px] text-slate-400">
-          <div className="flex items-center gap-2 text-slate-300 font-bold">
-            <AlertCircle size={14} className="text-amber-400" />
-            <span>Diretrizes e Jogo Responsável (+18)</span>
-          </div>
-
-          <p className="leading-relaxed">
-            A FuturoBet é uma plataforma destinada exclusivamente para maiores de 18 anos. Jogos online devem ser praticados como entretenimento casual e com responsabilidade financeira. Jogue com moderação.
-          </p>
-
-          <div className="grid grid-cols-2 gap-2 text-[10px] text-slate-400 pt-1">
-            <div className="flex items-center gap-1.5">
-              <CheckCircle2 size={12} className="text-emerald-400" />
-              <span>Transações 100% via PIX</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <CheckCircle2 size={12} className="text-emerald-400" />
-              <span>Auditoria de Jogos e RTP</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <CheckCircle2 size={12} className="text-emerald-400" />
-              <span>Criptografia SSL 256-Bit</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <CheckCircle2 size={12} className="text-emerald-400" />
-              <span>Privacidade em conformidade LGPD</span>
-            </div>
-          </div>
-
-          <div className="pt-2 border-t border-slate-800/60 text-center text-[10px] text-slate-500 space-y-1">
-            <p>© 2026 FuturoBet Oficial. Todos os direitos reservados.</p>
-            <p>Entretenimento digital seguro e certificado.</p>
-          </div>
-        </div>
-
-        {/* 8. BARRA FIXA INFERIOR NO MOBILE (STICKY BOTTOM CTA) */}
+        {/* 11. BARRA FIXA INFERIOR COM BOTÃO GOOGLE PLAY DE ALTA CONVERSÃO */}
         <div className="fixed bottom-0 left-0 right-0 z-50 flex justify-center pointer-events-none px-3 pb-3">
-          <div className="w-full max-w-md bg-[#0b1222]/95 backdrop-blur-xl border border-amber-500/30 rounded-2xl p-2.5 shadow-[0_10px_30px_rgba(0,0,0,0.9)] flex items-center justify-between gap-3 pointer-events-auto">
-            <div className="min-w-0 pl-1">
-              <span className="text-[10px] font-bold text-amber-400 uppercase tracking-wider block">
-                Bônus 100% no 1º PIX
-              </span>
-              <span className="text-xs font-black text-white truncate block">
-                Cadastre-se e Jogue Agora
-              </span>
+          <div className="w-full max-w-md bg-[#181a1e]/95 backdrop-blur-xl border border-[#2b2e33] rounded-2xl p-2.5 shadow-[0_10px_35px_rgba(0,0,0,0.95)] flex items-center justify-between gap-3 pointer-events-auto">
+            <div className="flex items-center gap-2.5 min-w-0 pl-1">
+              <div className="w-10 h-10 rounded-xl overflow-hidden bg-black flex-shrink-0 border border-[#2e3238]">
+                <img src={appIconImg} alt="FuturoBet" className="w-full h-full object-cover" />
+              </div>
+              <div className="min-w-0">
+                <span className="text-xs font-bold text-white truncate block">
+                  FuturoBet Oficial
+                </span>
+                <span className="text-[10px] text-[#00a86b] font-medium truncate block">
+                  Instale grátis • Bônus no 1º PIX
+                </span>
+              </div>
             </div>
 
             <button
-              onClick={() => handleRegisterAndPlay()}
-              className="py-2.5 px-4 bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-black font-black text-xs uppercase tracking-wide rounded-xl shadow-lg active:scale-95 transition cursor-pointer flex items-center gap-1 flex-shrink-0"
+              onClick={handleInstallClick}
+              disabled={isInstalling}
+              className="py-2.5 px-5 bg-[#01875f] hover:bg-[#007451] active:bg-[#005f3e] text-white font-bold text-xs uppercase tracking-wide rounded-full shadow-lg transition active:scale-95 cursor-pointer flex items-center gap-1.5 flex-shrink-0"
             >
-              <span>JOGAR AGORA</span>
-              <Zap size={14} className="fill-black" />
+              <span>{isInstalling ? 'Instalando...' : 'Instalar'}</span>
+              <ArrowRight size={14} />
             </button>
           </div>
         </div>
