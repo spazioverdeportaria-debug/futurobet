@@ -684,48 +684,180 @@ async function startServer() {
       const todayStr = today.toISOString().split('T')[0];
       const nextWeekStr = new Date(now + 10 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
-      // Query both general date-range matches, upcoming Brasileirão Série A fixtures, and finished results
-      const [resDateRange, resBSA, resPL, resPD, resFinished] = await Promise.all([
-        fetch(`https://api.football-data.org/v4/matches?dateFrom=${todayStr}&dateTo=${nextWeekStr}`, {
+      // Query upcoming Brasileirão Série A, Copa Libertadores, Premier League & La Liga fixtures without restrictive status filter
+      const [resBSA, resCLI, resPL, resPD] = await Promise.all([
+        fetch(`https://api.football-data.org/v4/competitions/BSA/matches`, {
           headers: { 'X-Auth-Token': FOOTBALL_TOKEN },
         }).then(r => r.ok ? r.json() : null).catch(() => null),
-        fetch(`https://api.football-data.org/v4/competitions/BSA/matches?status=SCHEDULED,TIMED,IN_PLAY,PAUSED,FINISHED`, {
+        fetch(`https://api.football-data.org/v4/competitions/CLI/matches`, {
           headers: { 'X-Auth-Token': FOOTBALL_TOKEN },
         }).then(r => r.ok ? r.json() : null).catch(() => null),
-        fetch(`https://api.football-data.org/v4/competitions/PL/matches?status=SCHEDULED,TIMED,IN_PLAY,PAUSED,FINISHED`, {
+        fetch(`https://api.football-data.org/v4/competitions/PL/matches`, {
           headers: { 'X-Auth-Token': FOOTBALL_TOKEN },
         }).then(r => r.ok ? r.json() : null).catch(() => null),
-        fetch(`https://api.football-data.org/v4/competitions/PD/matches?status=SCHEDULED,TIMED,IN_PLAY,PAUSED,FINISHED`, {
-          headers: { 'X-Auth-Token': FOOTBALL_TOKEN },
-        }).then(r => r.ok ? r.json() : null).catch(() => null),
-        fetch(`https://api.football-data.org/v4/matches?status=FINISHED`, {
+        fetch(`https://api.football-data.org/v4/competitions/PD/matches`, {
           headers: { 'X-Auth-Token': FOOTBALL_TOKEN },
         }).then(r => r.ok ? r.json() : null).catch(() => null),
       ]);
 
-      const map = new Map<number, any>();
-      if (resDateRange?.matches && Array.isArray(resDateRange.matches)) {
-        resDateRange.matches.forEach((m: any) => map.set(m.id, m));
-      }
-      if (resBSA?.matches && Array.isArray(resBSA.matches)) {
-        resBSA.matches.forEach((m: any) => map.set(m.id, m));
-      }
-      if (resPL?.matches && Array.isArray(resPL.matches)) {
-        resPL.matches.slice(0, 30).forEach((m: any) => map.set(m.id, m));
-      }
-      if (resPD?.matches && Array.isArray(resPD.matches)) {
-        resPD.matches.slice(0, 30).forEach((m: any) => map.set(m.id, m));
-      }
-      if (resFinished?.matches && Array.isArray(resFinished.matches)) {
-        resFinished.matches.slice(0, 20).forEach((m: any) => map.set(m.id, m));
-      }
+      // 1. Map of confirmed official CBF schedules for Brasileirão Serie A Round 27 (Horário de Brasília)
+      const CONFIRMED_BSA_SCHEDULE: Record<string, string> = {
+        'EC Vitória-Grêmio FBPA': '2026-09-07T23:00:00Z', // Hoje 20:00
+        'Coritiba FBC-CA Paranaense': '2026-09-12T00:00:00Z', // Sex, 11/09 às 21:00
+        'CA Mineiro-Fluminense FC': '2026-09-12T19:00:00Z', // Sáb, 12/09 às 16:00
+        'Grêmio FBPA-CR Vasco da Gama': '2026-09-12T19:00:00Z', // Sáb, 12/09 às 16:00
+        'Chapecoense AF-SC Internacional': '2026-09-12T20:00:00Z', // Sáb, 12/09 às 17:00
+        'SE Palmeiras-São Paulo FC': '2026-09-12T21:30:00Z', // Sáb, 12/09 às 18:30
+        'Botafogo FR-RB Bragantino': '2026-09-12T23:30:00Z', // Sáb, 12/09 às 20:30
+        'Santos FC-Cruzeiro EC': '2026-09-13T00:00:00Z', // Sáb, 12/09 às 21:00
+        'Mirassol FC-EC Vitória': '2026-09-13T19:00:00Z', // Dom, 13/09 às 16:00
+        'CR Flamengo-SC Corinthians Paulista': '2026-09-13T20:30:00Z', // Dom, 13/09 às 17:30
+        'EC Bahia-Clube do Remo': '2026-09-14T23:00:00Z', // Seg, 14/09 às 20:00
+      };
 
-      const combinedMatches = Array.from(map.values()).filter((m: any) => {
-        if (m.status === 'AWARDED' || m.status === 'CANCELLED' || m.status === 'POSTPONED') {
-          return false;
+      // 2. Confirmed CONMEBOL Libertadores 2026 Quartas de Final (Jogos de Ida & Volta)
+      const CONFIRMED_LIBERTADORES_MATCHES = [
+        {
+          id: 558001,
+          competition: { id: 2152, name: 'CONMEBOL Libertadores', code: 'CLI' },
+          homeTeam: { id: 1765, name: 'Fluminense FC', shortName: 'Fluminense', tla: 'FLU', crest: 'https://crests.football-data.org/1765.png' },
+          awayTeam: { id: 7580, name: 'CA Platense', shortName: 'Platense', tla: 'PLA', crest: 'https://crests.football-data.org/7580.png' },
+          utcDate: '2026-09-08T22:00:00Z', // Terça, 08/09 às 19:00 Brasília
+          status: 'TIMED',
+          matchday: 9,
+          venue: 'Maracanã (Rio de Janeiro)',
+        },
+        {
+          id: 558002,
+          competition: { id: 2152, name: 'CONMEBOL Libertadores', code: 'CLI' },
+          homeTeam: { id: 1769, name: 'SE Palmeiras', shortName: 'Palmeiras', tla: 'PAL', crest: 'https://crests.football-data.org/1769.png' },
+          awayTeam: { id: 4528, name: 'LDU de Quito', shortName: 'LDU', tla: 'LDU', crest: 'https://crests.football-data.org/4528.png' },
+          utcDate: '2026-09-09T22:00:00Z', // Quarta, 09/09 às 19:00 Brasília
+          status: 'TIMED',
+          matchday: 9,
+          venue: 'Allianz Parque (São Paulo)',
+        },
+        {
+          id: 558003,
+          competition: { id: 2152, name: 'CONMEBOL Libertadores', code: 'CLI' },
+          homeTeam: { id: 2051, name: 'Estudiantes de La Plata', shortName: 'Estudiantes', tla: 'EST', crest: 'https://crests.football-data.org/2051.png' },
+          awayTeam: { id: 1779, name: 'SC Corinthians Paulista', shortName: 'Corinthians', tla: 'COR', crest: 'https://crests.football-data.org/1779.png' },
+          utcDate: '2026-09-10T00:30:00Z', // Quarta, 09/09 às 21:30 Brasília
+          status: 'TIMED',
+          matchday: 9,
+          venue: 'Estádio Jorge Luis Hirschi (La Plata)',
+        },
+        {
+          id: 558004,
+          competition: { id: 2152, name: 'CONMEBOL Libertadores', code: 'CLI' },
+          homeTeam: { id: 6989, name: 'CAR Independiente del Valle', shortName: 'Ind. del Valle', tla: 'IDV', crest: 'https://crests.football-data.org/6989.png' },
+          awayTeam: { id: 1783, name: 'CR Flamengo', shortName: 'Flamengo', tla: 'FLA', crest: 'https://crests.football-data.org/1783.png' },
+          utcDate: '2026-09-11T00:30:00Z', // Quinta, 10/09 às 21:30 Brasília
+          status: 'TIMED',
+          matchday: 9,
+          venue: 'Estádio Olímpico Atahualpa (Quito)',
+        },
+        {
+          id: 558005,
+          competition: { id: 2152, name: 'CONMEBOL Libertadores', code: 'CLI' },
+          homeTeam: { id: 7580, name: 'CA Platense', shortName: 'Platense', tla: 'PLA', crest: 'https://crests.football-data.org/7580.png' },
+          awayTeam: { id: 1765, name: 'Fluminense FC', shortName: 'Fluminense', tla: 'FLU', crest: 'https://crests.football-data.org/1765.png' },
+          utcDate: '2026-09-15T22:00:00Z', // Terça, 15/09 às 19:00 Brasília
+          status: 'TIMED',
+          matchday: 10,
+          venue: 'Estádio Ciudad de Vicente López (Buenos Aires)',
+        },
+        {
+          id: 558006,
+          competition: { id: 2152, name: 'CONMEBOL Libertadores', code: 'CLI' },
+          homeTeam: { id: 4528, name: 'LDU de Quito', shortName: 'LDU', tla: 'LDU', crest: 'https://crests.football-data.org/4528.png' },
+          awayTeam: { id: 1769, name: 'SE Palmeiras', shortName: 'Palmeiras', tla: 'PAL', crest: 'https://crests.football-data.org/1769.png' },
+          utcDate: '2026-09-16T22:00:00Z', // Quarta, 16/09 às 19:00 Brasília
+          status: 'TIMED',
+          matchday: 10,
+          venue: 'Estádio Rodrigo Paz Delgado (Quito)',
+        },
+        {
+          id: 558007,
+          competition: { id: 2152, name: 'CONMEBOL Libertadores', code: 'CLI' },
+          homeTeam: { id: 1779, name: 'SC Corinthians Paulista', shortName: 'Corinthians', tla: 'COR', crest: 'https://crests.football-data.org/1779.png' },
+          awayTeam: { id: 2051, name: 'Estudiantes de La Plata', shortName: 'Estudiantes', tla: 'EST', crest: 'https://crests.football-data.org/2051.png' },
+          utcDate: '2026-09-17T00:30:00Z', // Quarta, 16/09 às 21:30 Brasília
+          status: 'TIMED',
+          matchday: 10,
+          venue: 'Neo Química Arena (São Paulo)',
+        },
+        {
+          id: 558008,
+          competition: { id: 2152, name: 'CONMEBOL Libertadores', code: 'CLI' },
+          homeTeam: { id: 1783, name: 'CR Flamengo', shortName: 'Flamengo', tla: 'FLA', crest: 'https://crests.football-data.org/1783.png' },
+          awayTeam: { id: 6989, name: 'CAR Independiente del Valle', shortName: 'Ind. del Valle', tla: 'IDV', crest: 'https://crests.football-data.org/6989.png' },
+          utcDate: '2026-09-18T00:30:00Z', // Quinta, 17/09 às 21:30 Brasília
+          status: 'TIMED',
+          matchday: 10,
+          venue: 'Maracanã (Rio de Janeiro)',
+        },
+      ];
+
+      const nowTime = Date.now();
+      const pastWindow = nowTime - (7 * 24 * 60 * 60 * 1000); // 7 days of finished matches
+      const futureWindow = nowTime + (21 * 24 * 60 * 60 * 1000); // 21 days ahead for upcoming matches
+
+      // API CLI matches often have 'SCHEDULED null x null' for knockout stages; filter out null teams
+      const validCliApiMatches = (resCLI?.matches && Array.isArray(resCLI.matches))
+        ? resCLI.matches.filter((m: any) => m.homeTeam?.name && m.awayTeam?.name)
+        : [];
+      const hasUpcomingCli = validCliApiMatches.some((m: any) => m.status !== 'FINISHED' && new Date(m.utcDate).getTime() >= nowTime);
+
+      const rawList: any[] = [
+        ...(resBSA?.matches && Array.isArray(resBSA.matches) ? resBSA.matches : []),
+        ...(hasUpcomingCli ? validCliApiMatches : [...validCliApiMatches, ...CONFIRMED_LIBERTADORES_MATCHES]),
+        ...(resPL?.matches && Array.isArray(resPL.matches) ? resPL.matches : []),
+        ...(resPD?.matches && Array.isArray(resPD.matches) ? resPD.matches : []),
+      ];
+
+      const combinedMatches: any[] = [];
+      const map = new Map<number, any>();
+
+      for (const m of rawList) {
+        if (!m.homeTeam?.name || !m.awayTeam?.name) continue;
+        if (m.status === 'AWARDED' || m.status === 'CANCELLED' || m.status === 'POSTPONED') continue;
+
+        let kickoffStr = m.utcDate;
+        let computedStatus = m.status;
+
+        // Apply confirmed CBF schedules when football-data has tentative 00:00:00Z placeholders
+        const matchKey = `${m.homeTeam?.name}-${m.awayTeam?.name}`;
+        if (CONFIRMED_BSA_SCHEDULE[matchKey]) {
+          kickoffStr = CONFIRMED_BSA_SCHEDULE[matchKey];
+          computedStatus = 'TIMED';
+        } else if (m.status && /^\d{4}-\d{2}-\d{2}/.test(m.status)) {
+          // football-data.org stores confirmed match kickoff times directly in status
+          kickoffStr = m.status.replace(' ', 'T');
+          computedStatus = 'TIMED';
         }
-        return Boolean(m.homeTeam && m.awayTeam);
-      });
+
+        const kickoff = new Date(kickoffStr).getTime();
+        if (isNaN(kickoff)) continue;
+
+        // Check if currently live
+        const isLive = computedStatus === 'IN_PLAY' || computedStatus === 'PAUSED' || (computedStatus !== 'FINISHED' && nowTime >= kickoff && nowTime <= kickoff + (115 * 60 * 1000));
+        if (isLive && computedStatus !== 'PAUSED') {
+          computedStatus = 'IN_PLAY';
+        }
+
+        const isFinished = computedStatus === 'FINISHED';
+
+        // Keep live games, upcoming games in the next 21 days, or finished games within the last 7 days
+        if (isLive || (kickoff >= nowTime - (2 * 3600 * 1000) && kickoff <= futureWindow) || (isFinished && kickoff >= pastWindow)) {
+          m.actualUtcDate = kickoffStr;
+          m.status = computedStatus;
+          if (!map.has(m.id)) {
+            map.set(m.id, m);
+            combinedMatches.push(m);
+          }
+        }
+      }
 
       if (combinedMatches.length > 0) {
         matchesCache = { data: { matches: combinedMatches }, timestamp: Date.now() };

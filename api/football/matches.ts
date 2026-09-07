@@ -19,35 +19,59 @@ export default async function handler(req: any, res: any) {
       headers['X-Auth-Token'] = API_KEY;
     }
 
-    const today = new Date();
-    const pastDate = new Date(today);
-    pastDate.setDate(today.getDate() - 1);
-    const futureDate = new Date(today);
-    futureDate.setDate(today.getDate() + 7);
+    // Fetch popular competitions: Brasileirão Série A, Libertadores, and European leagues
+    const [resBSA, resCLI] = await Promise.all([
+      fetch(`https://api.football-data.org/v4/competitions/BSA/matches`, { headers }).then(r => r.ok ? r.json() : null).catch(() => null),
+      fetch(`https://api.football-data.org/v4/competitions/CLI/matches`, { headers }).then(r => r.ok ? r.json() : null).catch(() => null),
+    ]);
 
-    const dateFrom = pastDate.toISOString().split('T')[0];
-    const dateTo = futureDate.toISOString().split('T')[0];
+    const rawList: any[] = [
+      ...(resBSA?.matches && Array.isArray(resBSA.matches) ? resBSA.matches : []),
+      ...(resCLI?.matches && Array.isArray(resCLI.matches) ? resCLI.matches : []),
+    ];
 
-    // Fetch live & upcoming matches
-    const url = `https://api.football-data.org/v4/matches?dateFrom=${dateFrom}&dateTo=${dateTo}`;
-    const response = await fetch(url, { headers });
+    const nowTime = Date.now();
+    const pastWindow = nowTime - (7 * 24 * 60 * 60 * 1000);
+    const futureWindow = nowTime + (21 * 24 * 60 * 60 * 1000);
 
-    if (!response.ok) {
-      // Also try fetching specific popular competitions
-      const fallbackUrl = `https://api.football-data.org/v4/competitions/BSA/matches?status=SCHEDULED,IN_PLAY,PAUSED,FINISHED`;
-      const fallbackRes = await fetch(fallbackUrl, { headers });
-      if (fallbackRes.ok) {
-        const data = await fallbackRes.json();
-        return res.status(200).json({ success: true, matches: data.matches || [] });
+    const matches: any[] = [];
+    const map = new Map<number, any>();
+
+    for (const m of rawList) {
+      if (!m.homeTeam?.name || !m.awayTeam?.name) continue;
+      if (m.status === 'AWARDED' || m.status === 'CANCELLED' || m.status === 'POSTPONED') continue;
+
+      let kickoffStr = m.utcDate;
+      let computedStatus = m.status;
+      if (m.status && /^\d{4}-\d{2}-\d{2}/.test(m.status)) {
+        kickoffStr = m.status.replace(' ', 'T');
+        computedStatus = 'TIMED';
       }
-      return res.status(200).json({ success: false, error: 'Failed to fetch from provider', matches: [] });
+
+      const kickoff = new Date(kickoffStr).getTime();
+      if (isNaN(kickoff)) continue;
+
+      const isLive = computedStatus === 'IN_PLAY' || computedStatus === 'PAUSED' || (computedStatus !== 'FINISHED' && nowTime >= kickoff && nowTime <= kickoff + (115 * 60 * 1000));
+      if (isLive && computedStatus !== 'PAUSED') {
+        computedStatus = 'IN_PLAY';
+      }
+
+      const isFinished = computedStatus === 'FINISHED';
+
+      if (isLive || (kickoff >= nowTime - (2 * 3600 * 1000) && kickoff <= futureWindow) || (isFinished && kickoff >= pastWindow)) {
+        m.actualUtcDate = kickoffStr;
+        m.status = computedStatus;
+        if (!map.has(m.id)) {
+          map.set(m.id, m);
+          matches.push(m);
+        }
+      }
     }
 
-    const data = await response.json();
     return res.status(200).json({
       success: true,
-      matches: data.matches || [],
-      count: data.matches?.length || 0,
+      matches,
+      count: matches.length,
       timestamp: Date.now()
     });
   } catch (error: any) {

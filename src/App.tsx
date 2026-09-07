@@ -678,10 +678,11 @@ function FuturoBetContent() {
           </div>
         )}
 
-        {/* POP-UPS PROMOCIONAIS DE ENTRADA NO CASSINO (4s Roleta e Sequência Pagando Muito) */}
+        {/* POP-UPS PROMOCIONAIS DE ENTRADA NO CASSINO (Roleta VIP & Bet de Esportes) */}
         <WelcomePromoPopups
           onOpenWheel={handleOpenWheel}
           onOpenGame={handleSelectGame}
+          onOpenSports={() => handleTabChange('futebol')}
           isAnyModalOpen={Boolean(selectedGame || isAuthModalOpen || isCashierOpen || isDepositOpen || isWheelOpen || isProfileOpen || isExitCasinoModalOpen)}
         />
 

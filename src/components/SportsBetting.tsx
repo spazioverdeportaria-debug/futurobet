@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 
 import sportsBannerBonusImg from '../assets/images/sports_promo_banner_1787424195529.jpg';
+import sportsBannerBonusWebp from '../assets/images/sports_promo_banner_optimized.webp';
 import heroMatchupImg from '../assets/images/football_hero_matchup_1786555584191.jpg';
 import depositBonusImg from '../assets/images/football_deposit_bonus_1786555603016.jpg';
 import earlyPayoutImg from '../assets/images/football_early_payout_1786555622855.jpg';
@@ -1225,12 +1226,19 @@ export default function SportsBetting({
               className="relative w-full aspect-[16/9] rounded-2xl overflow-hidden border border-[#1e3050]/80 hover:border-amber-400/80 bg-[#08101d] shadow-[0_4px_25px_rgba(0,0,0,0.85)] group cursor-pointer transition-all duration-300 active:scale-[0.99]"
               title="Clique para resgatar o bônus de 50% no depósito"
             >
-              <img
-                src={sportsBannerBonusImg}
-                alt="Promoção Exclusiva Esportes: Palpite Certo = +50% no Saldo"
-                referrerPolicy="no-referrer"
-                className="w-full h-full object-cover object-center group-hover:scale-[1.015] transition-transform duration-500"
-              />
+              <picture className="w-full h-full block">
+                <source srcSet={sportsBannerBonusWebp} type="image/webp" />
+                <img
+                  src={sportsBannerBonusImg}
+                  alt="Promoção Exclusiva Esportes: Palpite Certo = +50% no Saldo"
+                  referrerPolicy="no-referrer"
+                  loading="eager"
+                  decoding="async"
+                  // @ts-ignore
+                  fetchPriority="high"
+                  className="w-full h-full object-cover object-center group-hover:scale-[1.015] transition-transform duration-500"
+                />
+              </picture>
             </div>
           </div>
 
@@ -1243,8 +1251,14 @@ export default function SportsBetting({
           ) : filteredMatches.length === 0 ? (
             <div className="text-center py-10 bg-[#08101d] rounded-2xl border border-[#17243b] p-6 space-y-3 mx-3 my-2">
               <Trophy className="w-8 h-8 text-slate-600 mx-auto" />
-              <p className="text-xs font-bold text-slate-300">
-                {searchQuery ? `Nenhum evento encontrado para "${searchQuery}".` : 'Nenhum confronto programado nesta categoria no momento.'}
+              <p className="text-xs font-bold text-slate-300 max-w-md mx-auto leading-relaxed">
+                {searchQuery
+                  ? `Nenhum evento encontrado para "${searchQuery}".`
+                  : activeSport === 'SOCCER' && soccerFilter === 'COPA_DO_BRASIL'
+                  ? 'A Copa Betano do Brasil não possui partidas abertas na rodada da API oficial no momento. Confira os jogos ao vivo e as rodadas do Brasileirão Série A e Libertadores.'
+                  : activeSport === 'SOCCER' && soccerFilter === 'LIBERTADORES'
+                  ? 'CONMEBOL Libertadores: Próximos confrontos da fase eliminatória aguardando confirmação das datas oficiais. Acompanhe os jogos do Brasileirão Série A!'
+                  : 'Nenhum confronto programado nesta categoria no momento.'}
               </p>
               <button
                 onClick={() => { 
