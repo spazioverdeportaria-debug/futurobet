@@ -78,26 +78,66 @@ export default function FortuneOxGame({
     return () => clearTimeout(timer);
   }, [iframeKey]);
 
-  // 🛡️ BLOQUEIA TELA CHEIA NATIVA DO NAVEGADOR PARA NÃO SAIR DA NOSSA INTERFACE
+  // 🛡️ TRAVA TOTAL CONTRA TELA CHEIA (NUNCA PERMITE ABRIR TELA CHEIA DO PROVEDOR NEM EXPOR SALDO DEMO)
   useEffect(() => {
-    const handleFullscreenChange = () => {
-      if (document.fullscreenElement || (document as any).webkitFullscreenElement) {
-        if (document.exitFullscreen) {
-          document.exitFullscreen().catch(() => {});
-        } else if ((document as any).webkitExitFullscreen) {
-          (document as any).webkitExitFullscreen();
+    const exitAnyFullscreen = () => {
+      const fsEl = document.fullscreenElement || 
+                   (document as any).webkitFullscreenElement || 
+                   (document as any).mozFullScreenElement || 
+                   (document as any).msFullscreenElement;
+      if (fsEl) {
+        try {
+          if (document.exitFullscreen) {
+            document.exitFullscreen().catch(() => {});
+          } else if ((document as any).webkitExitFullscreen) {
+            (document as any).webkitExitFullscreen();
+          } else if ((document as any).mozCancelFullScreen) {
+            (document as any).mozCancelFullScreen();
+          } else if ((document as any).msExitFullscreen) {
+            (document as any).msExitFullscreen();
+          }
+        } catch (e) {
+          // ignore
         }
       }
     };
 
-    document.addEventListener('fullscreenchange', handleFullscreenChange);
-    document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
+    document.addEventListener('fullscreenchange', exitAnyFullscreen);
+    document.addEventListener('webkitfullscreenchange', exitAnyFullscreen);
+    document.addEventListener('mozfullscreenchange', exitAnyFullscreen);
+    document.addEventListener('MSFullscreenChange', exitAnyFullscreen);
+    window.addEventListener('fullscreenchange', exitAnyFullscreen);
+    window.addEventListener('webkitfullscreenchange', exitAnyFullscreen);
+
+    // Trava periódica a cada 200ms para garantir que nenhuma ação do provedor permaneça em tela cheia
+    const fsInterval = setInterval(exitAnyFullscreen, 200);
 
     return () => {
-      document.removeEventListener('fullscreenchange', handleFullscreenChange);
-      document.removeEventListener('webkitfullscreenchange', handleFullscreenChange);
+      document.removeEventListener('fullscreenchange', exitAnyFullscreen);
+      document.removeEventListener('webkitfullscreenchange', exitAnyFullscreen);
+      document.removeEventListener('mozfullscreenchange', exitAnyFullscreen);
+      document.removeEventListener('MSFullscreenChange', exitAnyFullscreen);
+      window.removeEventListener('fullscreenchange', exitAnyFullscreen);
+      window.removeEventListener('webkitfullscreenchange', exitAnyFullscreen);
+      clearInterval(fsInterval);
     };
   }, []);
+
+  // 🛡️ BLOQUEIA O MÉTODO requestFullscreen DIRETAMENTE NO ELEMENTO DO IFRAME
+  useEffect(() => {
+    if (iframeRef.current) {
+      const el = iframeRef.current as any;
+      try {
+        el.requestFullscreen = () => Promise.reject(new Error('Fullscreen disabled'));
+        el.webkitRequestFullscreen = () => {};
+        el.webkitRequestFullScreen = () => {};
+        el.mozRequestFullScreen = () => {};
+        el.msRequestFullscreen = () => {};
+      } catch (err) {
+        // ignore
+      }
+    }
+  }, [iframeKey]);
 
   // 🎯 DESCONTA O VALOR DA APOSTA SELECIONADA DIRETAMENTE DO SALDO REAL (HOUSE EDGE RETAIN)
   const handleSpinDeduction = useCallback(() => {
@@ -159,6 +199,19 @@ export default function FortuneOxGame({
       try {
         const msg = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
         if (!msg) return;
+
+        // 🛡️ Trava imediata contra qualquer evento que tente disparar tela cheia
+        if (
+          msg.event === 'fullscreen' || 
+          msg.action === 'fullscreen' || 
+          msg.type === 'FULLSCREEN' ||
+          (typeof msg === 'string' && msg.toLowerCase().includes('fullscreen'))
+        ) {
+          if (document.exitFullscreen) {
+            document.exitFullscreen().catch(() => {});
+          }
+          return;
+        }
 
         // Detecta giro da bobina ou aposta - desconta imediatamente
         if (
@@ -394,13 +447,17 @@ export default function FortuneOxGame({
           </div>
         )}
 
-        {/* 🎯 ENQUADRAMENTO EXATO: LARGURA 100% INTEGRAL (NÃO CORTA NENHUMA COLUNA OU PERSONAGEM) */}
+        {/* 🎯 ENQUADRAMENTO EXATO: LARGURA 100% INTEGRAL (RODAPÉ COM SALDO DEMO 100% OCULTO E TRAVADO ATRÁS DO FOOTER) */}
         <div 
           className="w-full h-full relative overflow-hidden flex items-center justify-center"
           style={{
-            // Altura expandida em 42px para empurrar o rodapé de crédito demo para baixo do footer
+            // Altura expandida para empurrar o rodapé de crédito demo com total segurança para baixo do footer
             marginTop: '0px',
-            marginBottom: '-38px',
+            marginBottom: '-42px',
+          }}
+          onDoubleClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
           }}
         >
           {/* Camada invisível de captura de toque quando saldo insuficiente para abrir popup em qualquer toque */}
@@ -422,11 +479,11 @@ export default function FortuneOxGame({
             className="w-full border-0 select-none bg-black block"
             style={{
               width: '100%',
-              height: 'calc(100% + 42px)',
+              height: 'calc(100% + 46px)',
               minHeight: '100%',
               touchAction: 'manipulation'
             }}
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
           />
         </div>
 

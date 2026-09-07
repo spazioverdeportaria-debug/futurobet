@@ -1757,6 +1757,40 @@ export default function AdminPanel({ onBackToCasino }: AdminPanelProps) {
                   </div>
                 </div>
 
+                {/* Link 3: Lucky Tiger Gold */}
+                <div className="p-3 bg-[#171924] rounded-2xl border border-zinc-800 space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-yellow-400 flex items-center gap-1.5">
+                      <span>🐯 Campanha Lucky Tiger Gold:</span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const url = `${window.location.origin}/?src=fb&app=luckytiger`;
+                        navigator.clipboard.writeText(url);
+                        setCopiedPresellLink('luckytiger');
+                        setTimeout(() => setCopiedPresellLink(null), 2500);
+                      }}
+                      className="px-2.5 py-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded-lg text-[11px] font-bold flex items-center gap-1 transition cursor-pointer"
+                    >
+                      {copiedPresellLink === 'luckytiger' ? (
+                        <>
+                          <Check className="w-3 h-3 text-emerald-400" />
+                          <span className="text-emerald-400">Copiado!</span>
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="w-3 h-3" />
+                          <span>Copiar Link</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                  <div className="font-mono text-[11px] text-zinc-400 truncate bg-black/40 p-2 rounded-lg select-all">
+                    {typeof window !== 'undefined' ? `${window.location.origin}/?src=fb&app=luckytiger` : '/?src=fb&app=luckytiger'}
+                  </div>
+                </div>
+
                 {/* Como Funciona a Proteção */}
                 <div className="p-3 bg-blue-950/20 border border-blue-500/20 rounded-xl text-[11px] text-zinc-400 space-y-1">
                   <span className="text-blue-300 font-bold block">Como os anúncios são protegidos de bloqueio:</span>

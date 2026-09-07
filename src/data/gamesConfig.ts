@@ -6,6 +6,9 @@ import jadeLegendsImg from '../assets/images/jade_legends_slot_1788619067857.jpg
 import deathDominionImg from '../assets/images/death_dominion_slot_1788619080433.jpg';
 import sunnydazeAsylumImg from '../assets/images/sunnydaze_asylum_slot_1788619094689.jpg';
 import sleepingDragonImg from '../assets/images/sleeping_dragon_slot_1788619111222.jpg';
+import luckyTigerGoldImg from '../assets/images/lucky_tiger_gold_slot_1788738484588.jpg';
+import sevenRushImg from '../assets/images/seven_rush_slot_1788738497552.jpg';
+import bingoManiaImg from '../assets/images/bingo_mania_slot_1788738511110.jpg';
 
 export interface GameConfig {
   id: string;
@@ -133,6 +136,45 @@ export const LIVE_WINNERS: LiveWinner[] = [
 ];
 
 export const GAMES_CATALOG: GameConfig[] = [
+  {
+    id: 'lucky-tiger-gold',
+    name: 'Lucky Tiger Gold',
+    provider: 'PRAGMATIC PLAY',
+    category: 'Slots',
+    multiplier: 'x25000',
+    rtp: '96.50%',
+    icon: '🐯',
+    bgImage: luckyTigerGoldImg,
+    badge: 'HOT',
+    accentColor: '#f59e0b',
+    demoUrl: 'https://demogamesfree.pragmaticplay.net/gs2c/openGame.do?gameSymbol=vs5luckytru&lang=pt&cur=BRL',
+  },
+  {
+    id: '777-rush',
+    name: '777 Rush',
+    provider: 'PRAGMATIC PLAY',
+    category: 'Slots',
+    multiplier: 'x2000',
+    rtp: '96.50%',
+    icon: '🎰',
+    bgImage: sevenRushImg,
+    badge: 'TURBO',
+    accentColor: '#ef4444',
+    demoUrl: 'https://demogamesfree.pragmaticplay.net/gs2c/openGame.do?gameSymbol=vs5t8goldfp&lang=pt&cur=BRL',
+  },
+  {
+    id: 'bingo-mania',
+    name: 'Bingo Mania',
+    provider: 'PRAGMATIC PLAY',
+    category: 'Slots',
+    multiplier: 'x5000',
+    rtp: '96.51%',
+    icon: '🎱',
+    bgImage: bingoManiaImg,
+    badge: 'NOVO',
+    accentColor: '#3b82f6',
+    demoUrl: 'https://demogamesfree.pragmaticplay.net/gs2c/openGame.do?gameSymbol=vs30bingomania&lang=pt&cur=BRL',
+  },
   {
     id: 'hand-of-midas',
     name: 'The Hand of Midas',
