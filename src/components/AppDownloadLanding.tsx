@@ -104,6 +104,7 @@ export default function AppDownloadLanding({ onEnterCasino }: AppDownloadLanding
       // ignore
     }
     localStorage.setItem('fb_presell_dismissed', 'true');
+    sessionStorage.setItem('fb_presell_dismissed', 'true');
     // Redireciona estritamente para a tela HOME, onde o jogador decide se navega ou cadastra
     onEnterCasino({ directRegister: false });
   };
@@ -138,6 +139,7 @@ export default function AppDownloadLanding({ onEnterCasino }: AppDownloadLanding
 
     setTimeout(() => {
       localStorage.setItem('fb_presell_dismissed', 'true');
+      sessionStorage.setItem('fb_presell_dismissed', 'true');
       localStorage.setItem('fb_pending_add_icon', 'true');
       // Encaminha para a tela HOME e abre o modal de cadastro para ativar o ícone na tela inicial
       onEnterCasino({ directRegister: true, addIconToPhone: true });

@@ -281,6 +281,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           if (remember) {
             localStorage.setItem(STORAGE_SESSION_KEY, JSON.stringify(serverUser));
           }
+          localStorage.setItem('fb_presell_dismissed', 'true');
+          sessionStorage.setItem('fb_presell_dismissed', 'true');
           setAccount(serverUser);
           return { success: true };
         } else if (data.error && !data.notFound) {
@@ -308,6 +310,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             if (remember) {
               localStorage.setItem(STORAGE_SESSION_KEY, JSON.stringify(firestoreUser));
             }
+            localStorage.setItem('fb_presell_dismissed', 'true');
+            sessionStorage.setItem('fb_presell_dismissed', 'true');
             return { success: true };
           }
         } catch {
@@ -387,6 +391,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // Salva em cache do aparelho
       localStorage.setItem(`futurobet_user_${userKey}`, JSON.stringify(newUser));
       localStorage.setItem(STORAGE_SESSION_KEY, JSON.stringify(newUser));
+      localStorage.setItem('fb_presell_dismissed', 'true');
+      sessionStorage.setItem('fb_presell_dismissed', 'true');
       setAccount(newUser);
 
       // Dispara evento no Meta Pixel

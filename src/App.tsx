@@ -51,8 +51,43 @@ function FuturoBetContent() {
     const hash = window.location.hash.toLowerCase();
     const path = window.location.pathname.toLowerCase();
 
-    // Se o usuário pedir explicitamente para testar/ver a landing page via URL
-    const isExplicitDownload = 
+    // 1. REGRA ABSOLUTA: Se o usuário já possui conta/sessão salva no dispositivo, NUNCA exibe a LP
+    const hasActiveSession = 
+      Boolean(localStorage.getItem('futurobet_auth_session')) ||
+      Boolean(sessionStorage.getItem('futurobet_auth_session')) ||
+      Boolean(localStorage.getItem('futurobet_current_user')) ||
+      Boolean(localStorage.getItem('vegas_cpf_data'));
+
+    let hasLocalUser = false;
+    try {
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && (k.startsWith('futurobet_user_') || k.startsWith('vegasbet_user_'))) {
+          hasLocalUser = true;
+          break;
+        }
+      }
+    } catch (e) {
+      // ignore
+    }
+
+    if (hasActiveSession || hasLocalUser) {
+      return false;
+    }
+
+    // 2. REGRA ABSOLUTA: Se já passou pela LP (clicou em jogar ou adicionar), NUNCA reabre ao reiniciar a tela
+    const alreadyDismissed = 
+      localStorage.getItem('fb_presell_dismissed') === 'true' ||
+      sessionStorage.getItem('fb_presell_dismissed') === 'true';
+
+    // Suporte a parâmetro explícito de teste/preview para desenvolvedor
+    const isExplicitPreview = urlParams.get('preview_lp') === '1' || urlParams.get('test_lp') === '1';
+    if (alreadyDismissed && !isExplicitPreview) {
+      return false;
+    }
+
+    // 3. Checagem de primeiro acesso vindo de tráfego pago (Meta Ads, Google, TikTok) ou links de download
+    const isDownloadUrl = 
       urlParams.get('download') === '1' || 
       urlParams.get('lp') === '1' || 
       urlParams.get('playstore') === '1' || 
@@ -67,27 +102,15 @@ function FuturoBetContent() {
       hash.includes('#playstore') ||
       hash.includes('#/playstore');
 
-    if (isExplicitDownload) return true;
-
-    // Se já estiver logado/cadastrado no navegador, NUNCA mostra a presell (vai direto pra Home)
-    const storedAuth = localStorage.getItem('futurobet_current_user') || localStorage.getItem('vegas_cpf_data');
-    if (storedAuth) return false;
-
-    // Se já dispensou/instalou nesta sessão/navegador, não exibe novamente
-    const alreadyDismissed = localStorage.getItem('fb_presell_dismissed') === 'true';
-    if (alreadyDismissed) return false;
-
-    // Verifica parâmetros de campanha do Meta Ads e outras fontes de tráfego pago
     const hasCampaignParam = 
       urlParams.has('src') || 
       urlParams.has('utm_source') || 
       urlParams.has('utm_campaign') || 
       urlParams.has('fbclid') || 
       urlParams.has('ref') || 
-      urlParams.has('ad') || 
-      urlParams.has('app');
+      urlParams.has('ad');
 
-    return hasCampaignParam;
+    return isExplicitPreview || isDownloadUrl || hasCampaignParam;
   });
 
   const [campaignGameParam] = useState<string | null>(() => {
@@ -96,19 +119,33 @@ function FuturoBetContent() {
     return urlParams.get('app') || urlParams.get('game') || 'fortune-tiger';
   });
 
-  // Atualiza exibição caso o usuário teste via hash (#download)
+  // Garante que se o usuário já estiver logado, a presell seja ocultada imediatamente
+  useEffect(() => {
+    if (isLoggedIn) {
+      setShowPresellLanding(false);
+      localStorage.setItem('fb_presell_dismissed', 'true');
+      sessionStorage.setItem('fb_presell_dismissed', 'true');
+    }
+  }, [isLoggedIn]);
+
+  // Atualiza exibição caso o usuário teste via hash (#download) - apenas se não estiver logado ou dispensado
   useEffect(() => {
     const handleHash = () => {
       const h = window.location.hash.toLowerCase();
       const p = window.location.pathname.toLowerCase();
       const q = new URLSearchParams(window.location.search);
-      if (h.includes('#download') || h.includes('#/download') || p === '/download' || q.get('download') === '1') {
-        setShowPresellLanding(true);
+      const dismissed = localStorage.getItem('fb_presell_dismissed') === 'true' || sessionStorage.getItem('fb_presell_dismissed') === 'true';
+      const hasAuth = Boolean(localStorage.getItem('futurobet_auth_session')) || isLoggedIn;
+
+      if (!dismissed && !hasAuth) {
+        if (h.includes('#download') || h.includes('#/download') || p === '/download' || q.get('download') === '1' || q.get('preview_lp') === '1') {
+          setShowPresellLanding(true);
+        }
       }
     };
     window.addEventListener('hashchange', handleHash);
     return () => window.removeEventListener('hashchange', handleHash);
-  }, []);
+  }, [isLoggedIn]);
 
   useEffect(() => {
     const checkPath = () => {
@@ -415,6 +452,35 @@ function FuturoBetContent() {
         gameIdParam={null}
         onEnterCasino={(options) => {
           setShowPresellLanding(false);
+          localStorage.setItem('fb_presell_dismissed', 'true');
+          sessionStorage.setItem('fb_presell_dismissed', 'true');
+
+          // Limpa da URL os parâmetros de LP e hashes para que refresh do navegador mantenha sempre na tela HOME
+          try {
+            const url = new URL(window.location.href);
+            url.searchParams.delete('download');
+            url.searchParams.delete('lp');
+            url.searchParams.delete('play');
+            url.searchParams.delete('playstore');
+            url.searchParams.delete('app');
+            url.searchParams.delete('game');
+            url.searchParams.delete('src');
+            url.searchParams.delete('utm_source');
+            url.searchParams.delete('utm_campaign');
+            url.searchParams.delete('fbclid');
+            url.searchParams.delete('ref');
+            url.searchParams.delete('ad');
+            if (url.hash.includes('download') || url.hash.includes('app') || url.hash.includes('playstore')) {
+              url.hash = '';
+            }
+            if (['/download', '/app', '/playstore'].includes(url.pathname.toLowerCase())) {
+              url.pathname = '/';
+            }
+            window.history.replaceState({}, document.title, url.pathname + (url.search || '') + (url.hash || ''));
+          } catch (e) {
+            // ignore
+          }
+
           // REGRA ABSOLUTA: Nunca abre direto para um jogo. SEMPRE encaminha para a TELA HOME!
           setSelectedGame(null);
           setCurrentTab('cassino');
