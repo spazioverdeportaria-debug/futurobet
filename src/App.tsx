@@ -55,12 +55,17 @@ function FuturoBetContent() {
     const isExplicitDownload = 
       urlParams.get('download') === '1' || 
       urlParams.get('lp') === '1' || 
+      urlParams.get('playstore') === '1' || 
+      urlParams.get('play') === '1' || 
       path === '/download' || 
       path === '/app' || 
+      path === '/playstore' || 
       hash.includes('#download') || 
       hash.includes('#/download') ||
       hash.includes('#app') ||
-      hash.includes('#/app');
+      hash.includes('#/app') ||
+      hash.includes('#playstore') ||
+      hash.includes('#/playstore');
 
     if (isExplicitDownload) return true;
 
