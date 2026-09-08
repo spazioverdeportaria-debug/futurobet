@@ -1,0 +1,16 @@
+{
+  "name": "FuturoBet",
+  "short_name": "FuturoBet",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#03070e",
+  "theme_color": "#03070e",
+  "icons": [
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

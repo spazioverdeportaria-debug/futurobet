@@ -26,7 +26,7 @@ import { db, doc, onSnapshot } from './lib/firebase';
 
 import { GAMES_CATALOG, GameConfig } from './data/gamesConfig';
 import { getOrFetchFootballMatches } from './data/footballCache';
-import { Sparkles, Trophy, Flame, ShieldCheck, Headphones, Zap, Gift } from 'lucide-react';
+import { Sparkles, Trophy, Flame, ShieldCheck, Headphones, Zap, Gift, Smartphone } from 'lucide-react';
 
 function FuturoBetContent() {
   const { account, isLoggedIn, updateBalance, logout } = useAuth();
@@ -192,6 +192,48 @@ function FuturoBetContent() {
     bonus: number;
     total: number;
   } | null>(null);
+
+  // 📱 Estado para adicionar o ícone à tela inicial do celular após cadastro
+  const [pendingAddIcon, setPendingAddIcon] = useState<boolean>(() => {
+    return localStorage.getItem('fb_pending_add_icon') === 'true';
+  });
+  const [showIconAddedSuccess, setShowIconAddedSuccess] = useState<boolean>(false);
+  const [showIosAddGuide, setShowIosAddGuide] = useState<boolean>(false);
+
+  // Efeito disparado quando o usuário realiza o cadastro com pendência de adicionar ícone
+  useEffect(() => {
+    if (isLoggedIn && pendingAddIcon) {
+      setPendingAddIcon(false);
+      localStorage.removeItem('fb_pending_add_icon');
+
+      // Garante que o jogador permaneça na TELA HOME do cassino
+      setSelectedGame(null);
+      setCurrentTab('cassino');
+
+      // 1. Tenta acionar o prompt nativo PWA para adicionar o ícone à tela inicial
+      const prompt = (window as any).deferredInstallPrompt;
+      if (prompt && typeof prompt.prompt === 'function') {
+        try {
+          prompt.prompt().then((res: any) => {
+            console.log('PWA Install Outcome:', res?.outcome);
+            (window as any).deferredInstallPrompt = null;
+          }).catch(() => null);
+        } catch (e) {
+          console.warn('Install prompt note:', e);
+        }
+      }
+
+      // 2. Feedback visual de sucesso ou instrução amigável para iOS
+      const isIos = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
+      if (isIos) {
+        setShowIosAddGuide(true);
+      } else {
+        setShowIconAddedSuccess(true);
+        const timer = setTimeout(() => setShowIconAddedSuccess(false), 6000);
+        return () => clearTimeout(timer);
+      }
+    }
+  }, [isLoggedIn, pendingAddIcon]);
 
   // Pre-fetch live football matches in background as soon as app opens
   useEffect(() => {
@@ -370,16 +412,20 @@ function FuturoBetContent() {
   if (showPresellLanding && !isLoggedIn) {
     return (
       <AppDownloadLanding
-        gameIdParam={campaignGameParam}
+        gameIdParam={null}
         onEnterCasino={(options) => {
           setShowPresellLanding(false);
-          if (options?.directGame) {
-            setSelectedGame(options.directGame);
-          }
+          // REGRA ABSOLUTA: Nunca abre direto para um jogo. SEMPRE encaminha para a TELA HOME!
+          setSelectedGame(null);
+          setCurrentTab('cassino');
+
           if (options?.directRegister) {
             setAuthModalMode('register');
-            setAuthActionName('resgatar 100% de bônus no 1º depósito');
+            setAuthActionName('adicionar o ícone na tela inicial e jogar');
             setIsAuthModalOpen(true);
+          }
+          if (options?.addIconToPhone) {
+            setPendingAddIcon(true);
           }
         }}
       />
@@ -702,6 +748,65 @@ function FuturoBetContent() {
           }}
           onClose={() => setShowFloatingBonusPrompt(false)}
         />
+
+        {/* NOTIFICAÇÃO: ÍCONE ADICIONADO AO CELULAR COM SUCESSO */}
+        {showIconAddedSuccess && (
+          <div className="fixed top-4 left-4 right-4 max-w-sm mx-auto z-50 bg-[#0c1322] border-2 border-[#eab308] rounded-2xl p-3.5 shadow-[0_10px_30px_rgba(0,0,0,0.8)] flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-amber-400/20 border border-amber-400/50 flex items-center justify-center flex-shrink-0 text-[#eab308]">
+              <Smartphone size={22} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <h4 className="text-xs font-black text-amber-400 uppercase tracking-wide">Ícone Adicionado ao Celular!</h4>
+              <p className="text-[11px] text-gray-200 mt-0.5 leading-snug">
+                O atalho do FuturoBet agora está na tela inicial do seu celular.
+              </p>
+            </div>
+            <button 
+              onClick={() => setShowIconAddedSuccess(false)}
+              className="text-gray-400 hover:text-white p-1 text-xs cursor-pointer"
+            >
+              ✕
+            </button>
+          </div>
+        )}
+
+        {/* GUIA DE FIXAÇÃO DE ÍCONE PARA USUÁRIOS DE IPHONE (iOS SAFARI) */}
+        {showIosAddGuide && (
+          <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-end justify-center p-4">
+            <div className="w-full max-w-md bg-[#0c1322] border border-amber-500/40 rounded-3xl p-5 text-white shadow-2xl space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="text-amber-400 font-black text-base">FUTURO<span className="text-white">BET</span></span>
+                  <span className="text-[10px] bg-amber-400/20 text-amber-300 px-2 py-0.5 rounded-full font-bold">iPhone / iPad</span>
+                </div>
+                <button onClick={() => setShowIosAddGuide(false)} className="text-gray-400 hover:text-white cursor-pointer">✕</button>
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-white">Como adicionar o ícone à sua tela inicial:</h3>
+                <ol className="mt-2.5 space-y-2 text-xs text-gray-300">
+                  <li className="flex items-start gap-2">
+                    <span className="w-5 h-5 rounded-full bg-amber-500/20 text-amber-400 font-bold flex items-center justify-center flex-shrink-0 text-[11px]">1</span>
+                    <span>Toque no botão <strong>Compartilhar</strong> (ícone com quadrado e seta para cima no Safari).</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="w-5 h-5 rounded-full bg-amber-500/20 text-amber-400 font-bold flex items-center justify-center flex-shrink-0 text-[11px]">2</span>
+                    <span>Role a lista e toque em <strong>"Adicionar à Tela de Início"</strong>.</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="w-5 h-5 rounded-full bg-amber-500/20 text-amber-400 font-bold flex items-center justify-center flex-shrink-0 text-[11px]">3</span>
+                    <span>Toque em <strong>Adicionar</strong> no canto superior direito.</span>
+                  </li>
+                </ol>
+              </div>
+              <button
+                onClick={() => setShowIosAddGuide(false)}
+                className="w-full py-3 bg-gradient-to-r from-amber-500 to-yellow-400 text-black font-extrabold text-sm rounded-xl shadow-lg cursor-pointer"
+              >
+                OK, ENTENDI! IR PARA O CASSINO
+              </button>
+            </div>
+          </div>
+        )}
 
       </div>
     </div>

@@ -33,11 +33,11 @@ import esportesPromoImg from '../assets/images/playstore_esportes_promo_17888342
 import cassinoSlotsImg from '../assets/images/playstore_cassino_slots_1788834297703.jpg';
 
 interface AppDownloadLandingProps {
-  onEnterCasino: (options?: { directRegister?: boolean; directGame?: string }) => void;
+  onEnterCasino: (options?: { directRegister?: boolean; addIconToPhone?: boolean }) => void;
   gameIdParam?: string | null;
 }
 
-export default function AppDownloadLanding({ onEnterCasino, gameIdParam }: AppDownloadLandingProps) {
+export default function AppDownloadLanding({ onEnterCasino }: AppDownloadLandingProps) {
   const [isAddingToPhone, setIsAddingToPhone] = useState(false);
   const [addProgress, setAddProgress] = useState(0);
   const [addMessage, setAddMessage] = useState('');
@@ -87,13 +87,14 @@ export default function AppDownloadLanding({ onEnterCasino, gameIdParam }: AppDo
     const handleBeforeInstall = (e: Event) => {
       e.preventDefault();
       setDeferredPrompt(e);
+      (window as any).deferredInstallPrompt = e;
     };
 
     window.addEventListener('beforeinstallprompt', handleBeforeInstall);
     return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstall);
   }, []);
 
-  // 1. BOTÃO PRÁTICO: "Jogar Agora" (Entrada direta e imediata no cassino/jogos)
+  // 1. BOTÃO PRÁTICO: "Jogar Agora" (Encaminha diretamente para a tela HOME do cassino - NUNCA direto para um jogo)
   const handlePlayNow = () => {
     try {
       if ((window as any).fbq) {
@@ -103,56 +104,44 @@ export default function AppDownloadLanding({ onEnterCasino, gameIdParam }: AppDo
       // ignore
     }
     localStorage.setItem('fb_presell_dismissed', 'true');
-    onEnterCasino({ directRegister: false, directGame: gameIdParam || undefined });
+    // Redireciona estritamente para a tela HOME, onde o jogador decide se navega ou cadastra
+    onEnterCasino({ directRegister: false });
   };
 
-  // 2. BOTÃO PRÁTICO: "Adicionar Cassino no Celular" (Adiciona atalho/PWA e entra)
+  // 2. BOTÃO PRÁTICO: "Adicionar Cassino no Celular" (Aparece carregando, pede cadastro e adiciona o ícone na tela inicial)
   const handleAddToPhone = async () => {
     if (isAddingToPhone) return;
 
     try {
       if ((window as any).fbq) {
         (window as any).fbq('track', 'Lead', { content_name: 'PlayStore_Adicionar_Celular' });
-        (window as any).fbq('track', 'InitiateCheckout', { content_name: 'PlayStore_Install_PWA' });
+        (window as any).fbq('track', 'InitiateCheckout', { content_name: 'PlayStore_Install_Icon' });
       }
     } catch (e) {
       // ignore
     }
 
-    // Se o navegador suportar instalação nativa PWA
-    if (deferredPrompt) {
-      try {
-        deferredPrompt.prompt();
-        const { outcome } = await deferredPrompt.userChoice;
-        if (outcome === 'accepted') {
-          localStorage.setItem('fb_presell_dismissed', 'true');
-          onEnterCasino({ directRegister: true, directGame: gameIdParam || undefined });
-          return;
-        }
-      } catch (err) {
-        console.warn('Install prompt note:', err);
-      }
-    }
-
-    // Feedback visual suave de instalação rápida Google Play
+    // Feedback visual animado de carregamento estilo Google Play
     setIsAddingToPhone(true);
-    setAddProgress(25);
-    setAddMessage('Verificando compatibilidade...');
+    setAddProgress(20);
+    setAddMessage('Preparando ícone do FuturoBet...');
 
     setTimeout(() => {
       setAddProgress(60);
-      setAddMessage('Adicionando atalho seguro ao celular...');
+      setAddMessage('Adicionando atalho à tela inicial do celular...');
     }, 400);
 
     setTimeout(() => {
       setAddProgress(100);
-      setAddMessage('Pronto! Abrindo FuturoBet...');
-    }, 900);
+      setAddMessage('Pronto! Redirecionando...');
+    }, 850);
 
     setTimeout(() => {
       localStorage.setItem('fb_presell_dismissed', 'true');
-      onEnterCasino({ directRegister: true, directGame: gameIdParam || undefined });
-    }, 1300);
+      localStorage.setItem('fb_pending_add_icon', 'true');
+      // Encaminha para a tela HOME e abre o modal de cadastro para ativar o ícone na tela inicial
+      onEnterCasino({ directRegister: true, addIconToPhone: true });
+    }, 1200);
   };
 
   return (
