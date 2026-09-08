@@ -22,8 +22,15 @@ import {
   ExternalLink,
   Zap,
   Flame,
-  Award
+  Award,
+  X,
+  Maximize2
 } from 'lucide-react';
+
+import roletaVipImg from '../assets/images/playstore_roleta_vip_1788834255148.jpg';
+import superOddsImg from '../assets/images/playstore_super_odds_1788834273635.jpg';
+import esportesPromoImg from '../assets/images/playstore_esportes_promo_1788834285851.jpg';
+import cassinoSlotsImg from '../assets/images/playstore_cassino_slots_1788834297703.jpg';
 
 interface AppDownloadLandingProps {
   onEnterCasino: (options?: { directRegister?: boolean; directGame?: string }) => void;
@@ -37,6 +44,43 @@ export default function AppDownloadLanding({ onEnterCasino, gameIdParam }: AppDo
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [showFullDescription, setShowFullDescription] = useState(false);
   const [activeBottomTab, setActiveBottomTab] = useState<'jogos' | 'apps' | 'pesquisa' | 'livros' | 'voce'>('pesquisa');
+  const [selectedScreenshotIndex, setSelectedScreenshotIndex] = useState<number | null>(null);
+
+  // 4 Prints oficiais e reais do FuturoBet para o Google Play Store
+  const casinoScreenshots = [
+    {
+      id: 'roleta_vip',
+      title: 'Roleta da Sorte VIP',
+      caption: 'Gire sem custos e concorra a até R$ 1.000 no PIX',
+      badge: 'Giro Grátis Disponível',
+      image: roletaVipImg,
+      fallback: '/playstore/1_roleta_vip.jpg',
+    },
+    {
+      id: 'super_odds',
+      title: 'Super Odds & Múltipla Turbinada',
+      caption: 'Cotações aumentadas e saque instantâneo no PIX',
+      badge: 'Odds Aumentadas 5.00x',
+      image: superOddsImg,
+      fallback: '/playstore/2_super_odds.jpg',
+    },
+    {
+      id: 'esportes_promo',
+      title: 'Promoção Esportes & Libertadores',
+      caption: 'Palpite Certo = +50% de bônus instantâneo no saldo',
+      badge: 'Palpite Certo +50%',
+      image: esportesPromoImg,
+      fallback: '/playstore/3_apostas_esportivas.jpg',
+    },
+    {
+      id: 'cassino_slots',
+      title: 'Lobby de Slots & Jogos Pragmatic',
+      caption: 'Sugar Rush 1000, Big Bass Bonanza, Aviator e Fortune Tiger',
+      badge: 'Slots & Crash Games',
+      image: cassinoSlotsImg,
+      fallback: '/playstore/4_cassino_slots.jpg',
+    },
+  ];
 
   // Captura o evento nativo de instalação do PWA no Android/Chrome
   useEffect(() => {
@@ -274,134 +318,129 @@ export default function AppDownloadLanding({ onEnterCasino, gameIdParam }: AppDo
         </section>
 
         {/* =========================================================
-            5. CARROSSEL DE PRINTS DO APP (Idêntico ao Betano na referência)
+            5. CARROSSEL DE PRINTS DO APP (4 Fotos Oficiais do FuturoBet)
            ========================================================= */}
         <section className="pt-3 pb-4">
-          <div className="flex gap-3 overflow-x-auto px-4 pb-2 no-scrollbar scroll-smooth">
-            
-            {/* Card 1: Promoções e Torneios */}
-            <div 
-              onClick={handlePlayNow}
-              className="flex-shrink-0 w-[160px] aspect-[9/16] rounded-[14px] bg-gradient-to-b from-[#111111] via-[#1a1a1a] to-[#0d0d0d] p-3 text-white flex flex-col justify-between border border-[#e0e0e0] shadow-sm cursor-pointer hover:opacity-95 transition"
-            >
-              <div>
-                <div className="font-black text-sm tracking-tight mb-2 flex items-center gap-0.5">
-                  <span className="text-[#eab308]">FUTURO</span>
-                  <span className="text-white">BET</span>
-                </div>
-                <div className="space-y-1.5 text-[9px] font-bold uppercase tracking-wider text-amber-300">
-                  <div className="flex items-center gap-1 bg-black/40 px-1.5 py-0.5 rounded border border-amber-500/30">
-                    <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
-                    <span>Torneios Diários</span>
+          <div className="flex gap-3.5 overflow-x-auto px-4 pb-2 no-scrollbar scroll-smooth">
+            {casinoScreenshots.map((item, index) => (
+              <div
+                key={item.id}
+                onClick={() => setSelectedScreenshotIndex(index)}
+                className="group relative flex-shrink-0 w-[175px] aspect-[9/16] rounded-[16px] overflow-hidden border border-[#dadce0] bg-[#111] shadow-[0_2px_8px_rgba(0,0,0,0.08)] cursor-pointer hover:shadow-md hover:border-[#0b57d0] transition-all"
+              >
+                {/* Imagem Real do Cassino / Google Play Store */}
+                <img
+                  src={item.image}
+                  alt={item.title}
+                  onError={(e) => {
+                    (e.currentTarget as HTMLImageElement).src = item.fallback;
+                  }}
+                  className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-300"
+                  loading="lazy"
+                />
+
+                {/* Tag sutil superior de destaque */}
+                <div className="absolute top-2.5 left-2.5 right-2.5 flex items-center justify-between pointer-events-none">
+                  <span className="px-2 py-0.5 rounded-md bg-black/60 backdrop-blur-md text-[9px] font-bold text-amber-300 tracking-wide border border-white/10 shadow-sm">
+                    {item.badge}
+                  </span>
+                  <div className="w-6 h-6 rounded-full bg-black/50 backdrop-blur-md flex items-center justify-center text-white/90">
+                    <Maximize2 size={11} />
                   </div>
-                  <div className="flex items-center gap-1 bg-black/40 px-1.5 py-0.5 rounded border border-amber-500/30">
-                    <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
-                    <span>Missões Exclusivas</span>
-                  </div>
-                  <div className="flex items-center gap-1 bg-black/40 px-1.5 py-0.5 rounded border border-amber-500/30">
-                    <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
-                    <span>Cashback Semanal</span>
-                  </div>
+                </div>
+
+                {/* Gradiente inferior com legenda Google Play */}
+                <div className="absolute inset-x-0 bottom-0 pt-8 pb-2.5 px-2.5 bg-gradient-to-t from-black/80 via-black/40 to-transparent pointer-events-none">
+                  <p className="text-[11px] font-bold text-white leading-tight line-clamp-1">
+                    {item.title}
+                  </p>
+                  <p className="text-[9px] text-gray-300 leading-tight mt-0.5 line-clamp-1">
+                    {item.caption}
+                  </p>
                 </div>
               </div>
-              
-              {/* Miniatura Ilustrativa do App */}
-              <div className="w-full bg-black/60 rounded-lg p-2 border border-white/10 text-center">
-                <p className="text-[10px] text-amber-400 font-bold">100% BÔNUS</p>
-                <p className="text-[8px] text-gray-300">No seu primeiro PIX</p>
-              </div>
+            ))}
+          </div>
 
-              <div className="text-[7px] text-gray-400 text-center leading-tight">
-                18+ Jogue com responsabilidade.
-              </div>
-            </div>
-
-            {/* Card 2: Melhores Odds e Apostas */}
-            <div 
-              onClick={handlePlayNow}
-              className="flex-shrink-0 w-[160px] aspect-[9/16] rounded-[14px] bg-gradient-to-b from-[#e65100] via-[#bf360c] to-[#3e1206] p-3 text-white flex flex-col justify-between border border-[#e0e0e0] shadow-sm cursor-pointer hover:opacity-95 transition"
-            >
-              <div>
-                <div className="font-black text-sm tracking-tight mb-2 flex items-center gap-0.5">
-                  <span className="text-[#eab308]">FUTURO</span>
-                  <span className="text-white">BET</span>
-                </div>
-                <div className="space-y-1 text-[9px] font-bold leading-tight">
-                  <p className="text-amber-200">MELHORES ODDS</p>
-                  <p className="text-[8px] text-white/90">APOSTAS MÚLTIPLAS COM ATÉ 200% DE AUMENTO</p>
-                </div>
-              </div>
-
-              <div className="bg-black/40 backdrop-blur-sm rounded-lg p-1.5 border border-white/10 space-y-1">
-                <div className="flex justify-between text-[8px] font-semibold text-gray-200">
-                  <span>Vitória x Grêmio</span>
-                  <span className="text-amber-400 font-bold">2.45</span>
-                </div>
-                <div className="flex justify-between text-[8px] font-semibold text-gray-200">
-                  <span>Flamengo x Coritiba</span>
-                  <span className="text-amber-400 font-bold">1.85</span>
-                </div>
-              </div>
-
-              <div className="text-[7px] text-white/70 text-center leading-tight">
-                Autorizado Portaria SPA/MF.
-              </div>
-            </div>
-
-            {/* Card 3: Criar Aposta & 25% Aumento */}
-            <div 
-              onClick={handlePlayNow}
-              className="flex-shrink-0 w-[160px] aspect-[9/16] rounded-[14px] bg-gradient-to-b from-[#ff6f00] via-[#e65100] to-[#bf360c] p-3 text-white flex flex-col justify-between border border-[#e0e0e0] shadow-sm cursor-pointer hover:opacity-95 transition"
-            >
-              <div>
-                <div className="font-black text-sm tracking-tight mb-2 flex items-center gap-0.5">
-                  <span className="text-[#eab308]">FUTURO</span>
-                  <span className="text-white">BET</span>
-                </div>
-                <div className="space-y-1 text-[9px] font-bold leading-tight">
-                  <p className="text-amber-200">25% DE AUMENTO</p>
-                  <p className="text-[8px] text-white/90">COM O CRIAR APOSTA AO VIVO</p>
-                </div>
-              </div>
-
-              <div className="bg-black/40 rounded-lg p-2 border border-white/10 text-center">
-                <p className="text-[10px] text-white font-extrabold">SAQUE IMEDIATO</p>
-                <p className="text-[8px] text-amber-300 font-bold">PIX em menos de 2 min</p>
-              </div>
-
-              <div className="text-[7px] text-white/70 text-center leading-tight">
-                18+ Ministério da Fazenda.
-              </div>
-            </div>
-
-            {/* Card 4: Roleta & Slots */}
-            <div 
-              onClick={handlePlayNow}
-              className="flex-shrink-0 w-[160px] aspect-[9/16] rounded-[14px] bg-gradient-to-b from-[#212121] via-[#111111] to-black p-3 text-white flex flex-col justify-between border border-[#e0e0e0] shadow-sm cursor-pointer hover:opacity-95 transition"
-            >
-              <div>
-                <div className="font-black text-sm tracking-tight mb-2 flex items-center gap-0.5">
-                  <span className="text-[#eab308]">FUTURO</span>
-                  <span className="text-white">BET</span>
-                </div>
-                <div className="space-y-1 text-[9px] font-bold leading-tight">
-                  <p className="text-amber-300">ROLETA BRASILEIRA</p>
-                  <p className="text-[8px] text-gray-300">CASSINO AO VIVO & SLOTS PG SOFT</p>
-                </div>
-              </div>
-
-              <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-2 text-center">
-                <p className="text-[10px] text-amber-400 font-black">FORTUNE TIGER</p>
-                <p className="text-[8px] text-gray-300">Fortune Ox & Roleta VIP</p>
-              </div>
-
-              <div className="text-[7px] text-gray-400 text-center leading-tight">
-                Segurança e criptografia SSL.
-              </div>
-            </div>
-
+          {/* Dica de navegação estilo Play Store */}
+          <div className="px-4 flex items-center justify-between text-[11px] text-[#5f6368] mt-1">
+            <span>Toque para ampliar as capturas de tela</span>
+            <span className="text-[#0b57d0] font-medium cursor-pointer" onClick={handlePlayNow}>
+              Ver todos os jogos →
+            </span>
           </div>
         </section>
+
+        {/* MODAL LIGHTBOX / EXPANSÃO DE CAPTURA DO PLAY STORE */}
+        {selectedScreenshotIndex !== null && (
+          <div 
+            className="fixed inset-0 z-50 bg-black/90 backdrop-blur-sm flex flex-col justify-between p-4"
+            onClick={() => setSelectedScreenshotIndex(null)}
+          >
+            {/* Top bar do modal */}
+            <div className="flex items-center justify-between text-white pb-2" onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-center gap-2">
+                <span className="font-bold text-sm text-[#eab308]">FUTURO<span className="text-white">BET</span></span>
+                <span className="text-xs text-gray-400">• {casinoScreenshots[selectedScreenshotIndex].title}</span>
+              </div>
+              <button 
+                onClick={() => setSelectedScreenshotIndex(null)}
+                className="p-1.5 bg-white/10 hover:bg-white/20 rounded-full text-white cursor-pointer transition"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Imagem ampliada centralizada */}
+            <div 
+              className="flex-1 flex items-center justify-center py-2"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <img
+                src={casinoScreenshots[selectedScreenshotIndex].image}
+                alt={casinoScreenshots[selectedScreenshotIndex].title}
+                onError={(e) => {
+                  (e.currentTarget as HTMLImageElement).src = casinoScreenshots[selectedScreenshotIndex].fallback;
+                }}
+                className="max-h-[75vh] w-auto rounded-2xl shadow-2xl border border-white/20 object-contain"
+              />
+            </div>
+
+            {/* Controles inferiores do modal */}
+            <div 
+              className="flex flex-col items-center gap-3 pt-2"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center gap-1.5">
+                {casinoScreenshots.map((_, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => setSelectedScreenshotIndex(idx)}
+                    className={`h-1.5 rounded-full transition-all ${
+                      selectedScreenshotIndex === idx ? 'w-6 bg-[#eab308]' : 'w-2 bg-white/40'
+                    }`}
+                  />
+                ))}
+              </div>
+
+              <div className="w-full max-w-xs flex gap-2">
+                <button
+                  onClick={handlePlayNow}
+                  className="flex-1 h-11 bg-[#0b57d0] hover:bg-[#0842a0] text-white text-sm font-semibold rounded-full flex items-center justify-center gap-2 shadow-lg cursor-pointer"
+                >
+                  <span>Jogar Agora</span>
+                  <ArrowRight size={16} />
+                </button>
+                <button
+                  onClick={() => setSelectedScreenshotIndex(null)}
+                  className="px-4 h-11 bg-white/10 hover:bg-white/20 text-white text-sm rounded-full cursor-pointer"
+                >
+                  Fechar
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* =========================================================
             6. SOBRE ESTE APP (Idêntico ao Google Play)

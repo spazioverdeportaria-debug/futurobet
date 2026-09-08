@@ -21,6 +21,14 @@
       "destination": "/api/syncpay/check-pix?id=:id"
     },
     {
+      "source": "/api/admin/:path*",
+      "destination": "/api/admin/:path*"
+    },
+    {
+      "source": "/api/system/:path*",
+      "destination": "/api/system/:path*"
+    },
+    {
       "source": "/api/syncpay/check-pix",
       "destination": "/api/syncpay/check-pix"
     },
