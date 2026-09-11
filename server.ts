@@ -1,5 +1,6 @@
 import express from 'express';
 import path from 'path';
+import fs from 'fs';
 import crypto from 'crypto';
 import { GoogleGenAI } from '@google/genai';
 import { createServer as createViteServer } from 'vite';
@@ -51,6 +52,48 @@ async function startServer() {
 
   const moderatedDeposits = new Map<string, ModeratedDeposit>();
   const registeredUsers = new Map<string, RegisteredUser>();
+  const USERS_FILE = path.join(process.cwd(), 'data', 'registered_users.json');
+
+  function loadPersistedUsers() {
+    try {
+      if (fs.existsSync(USERS_FILE)) {
+        const raw = fs.readFileSync(USERS_FILE, 'utf-8');
+        const list = JSON.parse(raw);
+        if (Array.isArray(list)) {
+          list.forEach((u) => {
+            const cleanCpf = u.cpf ? String(u.cpf).replace(/\D/g, '') : '';
+            const cleanPhone = u.phone ? String(u.phone).replace(/\D/g, '') : '';
+            const k = u.id || cleanCpf || (cleanPhone ? `tel_${cleanPhone}` : '');
+            if (k) registeredUsers.set(k, u);
+            if (cleanCpf) registeredUsers.set(cleanCpf, u);
+          });
+          console.log(`[Server] Loaded ${list.length} persisted users from disk.`);
+        }
+      }
+    } catch (e) {
+      console.warn('Warning loading persisted users:', e);
+    }
+  }
+
+  function savePersistedUsers() {
+    try {
+      const dir = path.dirname(USERS_FILE);
+      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+      const uniqueUsersMap = new Map<string, RegisteredUser>();
+      registeredUsers.forEach((u) => {
+        const k = u.id || (u.cpf ? String(u.cpf).replace(/\D/g, '') : '') || (u.phone ? `tel_${String(u.phone).replace(/\D/g, '')}` : `usr_${u.name}`);
+        if (k && !uniqueUsersMap.has(k)) {
+          uniqueUsersMap.set(k, u);
+        }
+      });
+      fs.writeFileSync(USERS_FILE, JSON.stringify(Array.from(uniqueUsersMap.values()), null, 2), 'utf-8');
+    } catch (e) {
+      console.warn('Warning saving persisted users:', e);
+    }
+  }
+
+  loadPersistedUsers();
+
   let globalMaintenanceMode = false;
   let globalMaintenanceMessage = 'Sistema em Manutenção para Melhorias. Voltamos em instantes!';
 
@@ -234,7 +277,7 @@ async function startServer() {
     toProcess.forEach((u) => {
       const cleanCpf = u.cpf ? String(u.cpf).replace(/\D/g, '') : '';
       const cleanPhone = u.phone ? String(u.phone).replace(/\D/g, '') : '';
-      const userKey = cleanCpf || (cleanPhone ? `tel_${cleanPhone}` : (u.id || `usr_${u.name}`));
+      const userKey = u.id || cleanCpf || (cleanPhone ? `tel_${cleanPhone}` : `usr_${u.name}`);
       if (!userKey) return;
 
       const existing = registeredUsers.get(userKey) || (cleanCpf ? registeredUsers.get(cleanCpf) : undefined);
@@ -253,12 +296,22 @@ async function startServer() {
       };
 
       registeredUsers.set(userKey, updatedData);
-      if (cleanCpf && userKey !== cleanCpf) {
+      if (cleanCpf) {
         registeredUsers.set(cleanCpf, updatedData);
       }
     });
 
-    const all = Array.from(registeredUsers.values()).sort(
+    savePersistedUsers();
+
+    const uniqueUsersMap = new Map<string, RegisteredUser>();
+    registeredUsers.forEach((u) => {
+      const k = u.id || (u.cpf ? String(u.cpf).replace(/\D/g, '') : '') || (u.phone ? `tel_${String(u.phone).replace(/\D/g, '')}` : `usr_${u.name}`);
+      if (k && !uniqueUsersMap.has(k)) {
+        uniqueUsersMap.set(k, u);
+      }
+    });
+
+    const all = Array.from(uniqueUsersMap.values()).sort(
       (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     );
 
@@ -308,7 +361,15 @@ async function startServer() {
 
   // Admin Get All Users
   app.get('/api/admin/users', requireAdminAuth, (req, res) => {
-    const all = Array.from(registeredUsers.values()).sort(
+    const uniqueUsersMap = new Map<string, RegisteredUser>();
+    registeredUsers.forEach((u) => {
+      const k = u.id || (u.cpf ? String(u.cpf).replace(/\D/g, '') : '') || (u.phone ? `tel_${String(u.phone).replace(/\D/g, '')}` : `usr_${u.name}`);
+      if (k && !uniqueUsersMap.has(k)) {
+        uniqueUsersMap.set(k, u);
+      }
+    });
+
+    const all = Array.from(uniqueUsersMap.values()).sort(
       (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     );
     return res.json({
@@ -320,21 +381,21 @@ async function startServer() {
 
   // Admin Update User Balance
   app.post('/api/admin/users/update-balance', requireAdminAuth, (req, res) => {
-    const { cpf, amount, type } = req.body || {};
+    const { id, cpf, phone, amount, type, setBalance } = req.body || {};
+    const cleanId = String(id || '').trim();
     const cleanCpf = String(cpf || '').replace(/\D/g, '');
-    if (!cleanCpf) {
-      return res.status(400).json({ success: false, error: 'CPF do jogador inválido.' });
+    const cleanPhone = String(phone || '').replace(/\D/g, '');
+    const userKey = cleanId || cleanCpf || (cleanPhone ? `tel_${cleanPhone}` : '');
+    if (!userKey) {
+      return res.status(400).json({ success: false, error: 'Identificador do jogador não informado.' });
     }
 
-    const numAmount = Number(amount);
-    if (isNaN(numAmount) || numAmount <= 0) {
-      return res.status(400).json({ success: false, error: 'Valor inválido.' });
-    }
-
-    let user = registeredUsers.get(cleanCpf);
+    let user = registeredUsers.get(userKey) || (cleanCpf ? registeredUsers.get(cleanCpf) : undefined) || (cleanPhone ? registeredUsers.get(`tel_${cleanPhone}`) : undefined);
     if (!user) {
       user = {
+        id: userKey,
         cpf: cleanCpf,
+        phone: cleanPhone,
         name: 'Jogador FuturoBet',
         balance: 0.00,
         balanceBonus: 0.00,
@@ -343,14 +404,24 @@ async function startServer() {
       };
     }
 
-    if (type === 'add') {
+    if (typeof setBalance === 'number') {
+      user.balance = parseFloat(Math.max(0, setBalance).toFixed(2));
+    } else if (type === 'add') {
+      const numAmount = Number(amount) || 0;
       user.balance = parseFloat((user.balance + numAmount).toFixed(2));
     } else if (type === 'subtract') {
+      const numAmount = Number(amount) || 0;
       user.balance = parseFloat((Math.max(0, user.balance - numAmount)).toFixed(2));
+    } else if (type === 'zero') {
+      user.balance = 0.00;
     }
 
     user.updatedAt = new Date().toISOString();
-    registeredUsers.set(cleanCpf, user);
+    registeredUsers.set(userKey, user);
+    if (cleanCpf) registeredUsers.set(cleanCpf, user);
+    if (cleanPhone) registeredUsers.set(`tel_${cleanPhone}`, user);
+
+    savePersistedUsers();
 
     return res.json({
       success: true,
@@ -361,16 +432,22 @@ async function startServer() {
 
   // Admin Reset User Password
   app.post('/api/admin/users/reset-password', requireAdminAuth, (req, res) => {
-    const { cpf, newPassword } = req.body || {};
+    const { id, cpf, phone, newPassword } = req.body || {};
+    const cleanId = String(id || '').trim();
     const cleanCpf = String(cpf || '').replace(/\D/g, '');
-    if (!cleanCpf || !newPassword) {
-      return res.status(400).json({ success: false, error: 'CPF e nova senha são obrigatórios.' });
+    const cleanPhone = String(phone || '').replace(/\D/g, '');
+    const userKey = cleanId || cleanCpf || (cleanPhone ? `tel_${cleanPhone}` : '');
+
+    if (!userKey || !newPassword) {
+      return res.status(400).json({ success: false, error: 'Identificador do jogador e nova senha são obrigatórios.' });
     }
 
-    let user = registeredUsers.get(cleanCpf);
+    let user = registeredUsers.get(userKey) || (cleanCpf ? registeredUsers.get(cleanCpf) : undefined) || (cleanPhone ? registeredUsers.get(`tel_${cleanPhone}`) : undefined);
     if (!user) {
       user = {
+        id: userKey,
         cpf: cleanCpf,
+        phone: cleanPhone,
         name: 'Jogador FuturoBet',
         balance: 0.00,
         balanceBonus: 0.00,
@@ -381,7 +458,11 @@ async function startServer() {
 
     user.passwordHash = String(newPassword).trim();
     user.updatedAt = new Date().toISOString();
-    registeredUsers.set(cleanCpf, user);
+    registeredUsers.set(userKey, user);
+    if (cleanCpf) registeredUsers.set(cleanCpf, user);
+    if (cleanPhone) registeredUsers.set(`tel_${cleanPhone}`, user);
+
+    savePersistedUsers();
 
     return res.json({
       success: true,

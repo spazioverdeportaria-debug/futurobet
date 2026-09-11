@@ -1,15 +1,30 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   ShieldCheck, Lock, User, KeyRound, AlertTriangle, Power,
   CheckCircle2, XCircle, Search, DollarSign, Plus, Minus,
-  RefreshCw, Users, CreditCard, Clock, MessageSquare,
-  ExternalLink, Copy, Check, Filter, ShieldAlert, ArrowLeft,
-  ChevronRight, Sparkles, SlidersHorizontal, Eye, EyeOff
+  RefreshCw, Users, CreditCard, Clock, Eye, EyeOff,
+  Copy, Check, ArrowLeft, Trash2, Edit3, Smartphone,
+  FileText, Calendar, ShieldAlert
 } from 'lucide-react';
-import { db, collection, getDocs, doc, setDoc, updateDoc, onSnapshot, query, orderBy } from '../lib/firebase';
+import { db, collection, getDocs, doc, setDoc, updateDoc, deleteDoc, onSnapshot } from '../lib/firebase';
 import { soundEngine } from '../utils/audio';
 
-interface DepositItem {
+export interface UserProfile {
+  id?: string;
+  cpf: string;
+  name: string;
+  phone?: string;
+  passwordHash?: string;
+  balance: number;
+  balanceBonus?: number;
+  createdAt?: string;
+  updatedAt?: string;
+  email?: string;
+  displayName?: string;
+  referralCode?: string;
+}
+
+export interface DepositItem {
   id: string;
   transactionId: string;
   cpf: string;
@@ -26,23 +41,12 @@ interface DepositItem {
   pixCode?: string;
 }
 
-interface UserProfile {
-  cpf: string;
-  name: string;
-  phone?: string;
-  passwordHash?: string;
-  balance: number;
-  balanceBonus?: number;
-  createdAt?: string;
-  updatedAt?: string;
-}
-
 interface AdminPanelProps {
   onBackToCasino?: () => void;
 }
 
 export default function AdminPanel({ onBackToCasino }: AdminPanelProps) {
-  // Authentication State with Server Token
+  // Admin Auth State
   const [adminToken, setAdminToken] = useState<string>(() => {
     return sessionStorage.getItem('futurobet_admin_token') || localStorage.getItem('futurobet_admin_token') || '';
   });
@@ -50,13 +54,61 @@ export default function AdminPanel({ onBackToCasino }: AdminPanelProps) {
     const token = sessionStorage.getItem('futurobet_admin_token') || localStorage.getItem('futurobet_admin_token');
     return Boolean(token) && localStorage.getItem('futurobet_admin_auth') === 'true';
   });
+
   const [usernameInput, setUsernameInput] = useState('');
   const [passwordInput, setPasswordInput] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
+  const [showLoginPassword, setShowLoginPassword] = useState(false);
   const [loginError, setLoginError] = useState<string | null>(null);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
 
-  // Helper for authorized admin request headers
+  // Active view: 'users' (default) or 'deposits'
+  const [activeTab, setActiveTab] = useState<'users' | 'deposits'>('users');
+
+  // Users Data
+  const [users, setUsers] = useState<UserProfile[]>([]);
+  const [isLoadingUsers, setIsLoadingUsers] = useState(false);
+  const [userSearch, setUserSearch] = useState('');
+  const [userFilter, setUserFilter] = useState<'ALL' | 'WITH_BALANCE' | 'ZERO_BALANCE'>('ALL');
+
+  // Visibility map for passwords
+  const [visiblePasswords, setVisiblePasswords] = useState<Record<string, boolean>>({});
+
+  // Modals for actions
+  const [balanceModalUser, setBalanceModalUser] = useState<UserProfile | null>(null);
+  const [balanceModalMode, setBalanceModalMode] = useState<'add' | 'subtract' | 'set'>('add');
+  const [balanceInputAmount, setBalanceInputAmount] = useState('');
+  const [isUpdatingBalance, setIsUpdatingBalance] = useState(false);
+
+  const [passwordModalUser, setPasswordModalUser] = useState<UserProfile | null>(null);
+  const [newPasswordInput, setNewPasswordInput] = useState('');
+  const [isUpdatingPassword, setIsUpdatingPassword] = useState(false);
+
+  const [deleteConfirmUser, setDeleteConfirmUser] = useState<UserProfile | null>(null);
+  const [isDeletingUser, setIsDeletingUser] = useState(false);
+
+  // Deposits State
+  const [deposits, setDeposits] = useState<DepositItem[]>([]);
+  const [depositFilter, setDepositFilter] = useState<'ALL' | 'PENDING' | 'APPROVED' | 'REJECTED'>('PENDING');
+  const [processingDepositId, setProcessingDepositId] = useState<string | null>(null);
+
+  // Toast / Feedback
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [toastType, setToastType] = useState<'success' | 'error' | 'info'>('success');
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
+
+  const showToast = useCallback((msg: string, type: 'success' | 'error' | 'info' = 'success') => {
+    setToastMessage(msg);
+    setToastType(type);
+    setTimeout(() => setToastMessage(null), 3500);
+  }, []);
+
+  const handleCopy = (text: string, key: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedKey(key);
+    soundEngine.playCoinDrop();
+    setTimeout(() => setCopiedKey(null), 2000);
+  };
+
   const getAdminHeaders = useCallback(() => {
     const token = adminToken || sessionStorage.getItem('futurobet_admin_token') || localStorage.getItem('futurobet_admin_token') || '';
     return {
@@ -65,83 +117,20 @@ export default function AdminPanel({ onBackToCasino }: AdminPanelProps) {
     };
   }, [adminToken]);
 
-  // Handle session invalidation (401)
-  const handleUnauthorized = useCallback(() => {
-    sessionStorage.removeItem('futurobet_admin_token');
-    localStorage.removeItem('futurobet_admin_token');
-    localStorage.removeItem('futurobet_admin_auth');
-    setAdminToken('');
-    setIsAdminAuthenticated(false);
-    showToast('Sessão expirada. Faça login novamente.', 'error');
-  }, []);
-
-  // Navigation Tabs
-  const [activeTab, setActiveTab] = useState<'deposits' | 'users' | 'system' | 'support'>('deposits');
-
-  // Maintenance & System State
-  const [maintenanceMode, setMaintenanceMode] = useState<boolean>(false);
-  const [maintenanceMessage, setMaintenanceMessage] = useState<string>(
-    'Sistema em Manutenção para Melhorias. Voltamos em instantes!'
-  );
-  const [isSavingMaintenance, setIsSavingMaintenance] = useState(false);
-  const [copiedPresellLink, setCopiedPresellLink] = useState<string | null>(null);
-
-  // Moderated Deposits State
-  const [deposits, setDeposits] = useState<DepositItem[]>([]);
-  const [depositFilter, setDepositFilter] = useState<'ALL' | 'PENDING' | 'APPROVED' | 'REJECTED'>('PENDING');
-  const [depositSearch, setDepositSearch] = useState('');
-  const [processingDepositId, setProcessingDepositId] = useState<string | null>(null);
-
-  // Users State
-  const [users, setUsers] = useState<UserProfile[]>([]);
-  const [userSearch, setUserSearch] = useState('');
-  const [selectedUser, setSelectedUser] = useState<UserProfile | null>(null);
-
-  // User Actions Modals State
-  const [balanceActionModal, setBalanceActionModal] = useState<{
-    user: UserProfile;
-    type: 'add' | 'subtract';
-  } | null>(null);
-  const [balanceAmountInput, setBalanceAmountInput] = useState('');
-  const [isUpdatingBalance, setIsUpdatingBalance] = useState(false);
-
-  const [passwordResetModal, setPasswordResetModal] = useState<UserProfile | null>(null);
-  const [newPasswordInput, setNewPasswordInput] = useState('');
-  const [passwordResetSuccess, setPasswordResetSuccess] = useState<string | null>(null);
-  const [isResettingPassword, setIsResettingPassword] = useState(false);
-
-  // Quick Support Lookup
-  const [supportLookupCpf, setSupportLookupCpf] = useState('');
-  const [supportLookupResult, setSupportLookupResult] = useState<UserProfile | null>(null);
-  const [supportLookupError, setSupportLookupError] = useState<string | null>(null);
-
-  // Copied helper
-  const [copiedKey, setCopiedKey] = useState<string | null>(null);
-
-  // Toast / Status banner
-  const [statusNotification, setStatusNotification] = useState<{
-    type: 'success' | 'error' | 'info';
-    message: string;
-  } | null>(null);
-
-  const showToast = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
-    setStatusNotification({ type, message });
-    setTimeout(() => setStatusNotification(null), 4000);
-  };
-
-  const handleCopy = (text: string, key: string) => {
-    navigator.clipboard.writeText(text);
-    setCopiedKey(key);
-    soundEngine.playCoinDrop();
-    setTimeout(() => setCopiedKey(null), 2500);
-  };
-
-  // Format currency in BRL (pt-BR)
   const formatBRL = (val: number) => {
     return (val || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   };
 
-  // Handle Admin Login
+  const getUserKey = (u: UserProfile): string => {
+    if (u.id) return u.id;
+    const cleanCpf = u.cpf ? u.cpf.replace(/\D/g, '') : '';
+    if (cleanCpf) return cleanCpf;
+    const cleanPhone = u.phone ? u.phone.replace(/\D/g, '') : '';
+    if (cleanPhone) return `tel_${cleanPhone}`;
+    return `usr_${u.name}`;
+  };
+
+  // 1. Admin Login
   const handleAdminLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoginError(null);
@@ -150,14 +139,12 @@ export default function AdminPanel({ onBackToCasino }: AdminPanelProps) {
     try {
       const cleanUser = usernameInput.trim();
       const cleanPass = passwordInput.trim();
-
       const validUser = 'copywriter';
       const validPass = '3657';
 
       let loginSuccessful = false;
       let tokenToUse = '';
 
-      // 1. Attempt official API login
       try {
         const res = await fetch('/api/admin/login', {
           method: 'POST',
@@ -172,17 +159,16 @@ export default function AdminPanel({ onBackToCasino }: AdminPanelProps) {
             loginSuccessful = true;
             tokenToUse = data.token;
           } else if (data.error && res.status === 401) {
-            setLoginError(data.error || 'Usuário ou senha de administrador incorretos.');
+            setLoginError(data.error);
             soundEngine.playLockedSound();
             setIsLoggingIn(false);
             return;
           }
         }
       } catch (fetchErr) {
-        console.warn('API login request error, evaluating direct credentials fallback:', fetchErr);
+        console.warn('API login request notice, checking direct fallback:', fetchErr);
       }
 
-      // 2. Direct credential validation fallback (avoids Vercel / proxy non-JSON 404 lockout)
       if (!loginSuccessful) {
         if (cleanUser === validUser && cleanPass === validPass) {
           loginSuccessful = true;
@@ -197,9 +183,9 @@ export default function AdminPanel({ onBackToCasino }: AdminPanelProps) {
         setAdminToken(tokenToUse);
         setIsAdminAuthenticated(true);
         soundEngine.playWinChime();
-        showToast('Bem-vindo ao Painel Administrativo do FuturoBet!');
+        showToast('Login realizado com sucesso! Painel Administrador Liberado.');
       } else {
-        setLoginError('Usuário ou senha de administrador incorretos.');
+        setLoginError('Usuário ou senha incorretos.');
         soundEngine.playLockedSound();
       }
     } catch (err: any) {
@@ -215,659 +201,515 @@ export default function AdminPanel({ onBackToCasino }: AdminPanelProps) {
     localStorage.removeItem('futurobet_admin_auth');
     setAdminToken('');
     setIsAdminAuthenticated(false);
-    showToast('Sessão encerrada com sucesso.', 'info');
+    showToast('Sessão encerrada.', 'info');
   };
 
-  // 1. Listen to System Settings & Maintenance Mode
-  useEffect(() => {
-    if (!isAdminAuthenticated) return;
-
-    // Load from backend safely
-    fetch('/api/system/status')
-      .then((r) => (r.ok && r.headers.get('content-type')?.includes('application/json') ? r.json() : null))
-      .then((data) => {
-        if (data && typeof data.maintenanceMode === 'boolean') {
-          setMaintenanceMode(data.maintenanceMode);
-        }
-        if (data && data.maintenanceMessage) {
-          setMaintenanceMessage(data.maintenanceMessage);
-        }
-      })
-      .catch(() => null);
-
-    // Firestore real-time listener for system_settings
+  // 2. Fetch Users from all sources (Firestore + Backend + Realtime)
+  const fetchAllUsers = useCallback(async () => {
+    setIsLoadingUsers(true);
     try {
-      const unsub = onSnapshot(doc(db, 'system_settings', 'config'), (snap) => {
-        if (snap.exists()) {
-          const data = snap.data();
-          if (typeof data.maintenanceMode === 'boolean') {
-            setMaintenanceMode(data.maintenanceMode);
-          }
-          if (data.maintenanceMessage) {
-            setMaintenanceMessage(data.maintenanceMessage);
-          }
-        }
-      });
-      return () => unsub();
-    } catch (e) {
-      console.warn('System settings listener notice:', e);
-    }
-  }, [isAdminAuthenticated]);
+      const map = new Map<string, UserProfile>();
 
-  // 2. Listen to Moderated Deposits Queue (Real-time Firestore + Backend Sync)
-  useEffect(() => {
-    if (!isAdminAuthenticated) return;
+      // A) Firestore getDocs
+      try {
+        const snap = await getDocs(collection(db, 'users'));
+        snap.forEach((docSnap) => {
+          const d = docSnap.data();
+          const docId = docSnap.id;
+          const userObj: UserProfile = {
+            id: docId,
+            cpf: d.cpf || (docId.startsWith('tel_') ? '' : docId),
+            name: d.name || d.displayName || 'Jogador FuturoBet',
+            phone: d.phone || (docId.startsWith('tel_') ? docId.replace('tel_', '') : ''),
+            passwordHash: d.passwordHash || '',
+            balance: typeof d.balance === 'number' ? d.balance : 0,
+            balanceBonus: typeof d.balanceBonus === 'number' ? d.balanceBonus : 0,
+            createdAt: d.createdAt || '',
+            updatedAt: d.updatedAt || '',
+            email: d.email || '',
+            referralCode: d.referralCode || '',
+          };
+          map.set(docId, userObj);
+        });
+      } catch (fsErr) {
+        console.warn('Firestore getDocs notice:', fsErr);
+      }
 
-    const fetchServerDeposits = () => {
-      fetch('/api/admin/deposits', { headers: getAdminHeaders() })
-        .then((r) => {
-          if (r.status === 401) {
-            handleUnauthorized();
-            return null;
-          }
-          if (!r.ok || !r.headers.get('content-type')?.includes('application/json')) {
-            return null;
-          }
-          return r.json();
-        })
-        .then((data) => {
-          if (data && data.success && Array.isArray(data.deposits)) {
-            setDeposits((prev) => {
-              const map = new Map<string, DepositItem>();
-              prev.forEach((d) => map.set(d.id || d.transactionId, d));
-              data.deposits.forEach((d: DepositItem) => map.set(d.id || d.transactionId, d));
-              return Array.from(map.values()).sort(
-                (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-              );
+      // B) Backend API /api/admin/users
+      try {
+        const res = await fetch('/api/admin/users', { headers: getAdminHeaders() });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.users && Array.isArray(data.users)) {
+            data.users.forEach((u: any) => {
+              const k = u.id || (u.cpf ? u.cpf.replace(/\D/g, '') : '') || (u.phone ? `tel_${u.phone.replace(/\D/g, '')}` : `usr_${u.name}`);
+              if (k) {
+                if (map.has(k)) {
+                  map.set(k, { ...map.get(k), ...u });
+                } else {
+                  map.set(k, u);
+                }
+              }
             });
           }
-        })
-        .catch(() => null);
-    };
-
-    fetchServerDeposits();
-    const interval = setInterval(fetchServerDeposits, 3000);
-
-    // Real-time Firestore snapshot
-    try {
-      const unsub = onSnapshot(
-        collection(db, 'deposits'),
-        (snapshot) => {
-          const list: DepositItem[] = [];
-          snapshot.forEach((docSnap) => {
-            list.push({ id: docSnap.id, ...docSnap.data() } as DepositItem);
-          });
-          if (list.length > 0) {
-            list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-            setDeposits(list);
-          }
-        },
-        (err) => {
-          console.warn('Deposits snapshot notice:', err);
         }
-      );
+      } catch (srvErr) {
+        console.warn('Backend users notice:', srvErr);
+      }
 
-      return () => {
-        clearInterval(interval);
-        unsub();
-      };
-    } catch (e) {
-      return () => clearInterval(interval);
-    }
-  }, [isAdminAuthenticated]);
-
-  // 3. Listen to Users List (Real-time Firestore + Backend API + Local Storage Aggregation)
-  useEffect(() => {
-    if (!isAdminAuthenticated) return;
-
-    // A) Scan and auto-sync any existing accounts stored in local browser cache to Firestore & Backend
-    try {
-      const localUsers: UserProfile[] = [];
-      for (let i = 0; i < localStorage.length; i++) {
-        const key = localStorage.key(i);
-        if (key && (key.startsWith('futurobet_user_') || key.startsWith('vegasbet_user_') || key === 'futurobet_auth_session')) {
-          const raw = localStorage.getItem(key);
-          if (raw) {
-            try {
+      // C) Local Storage fallback
+      try {
+        for (let i = 0; i < localStorage.length; i++) {
+          const k = localStorage.key(i);
+          if (k && k.startsWith('futurobet_user_')) {
+            const raw = localStorage.getItem(k);
+            if (raw) {
               const u = JSON.parse(raw);
-              if (u && u.cpf) {
-                const cleanCpf = String(u.cpf).replace(/\D/g, '');
-                localUsers.push({
-                  cpf: cleanCpf,
-                  name: u.name || 'Jogador FuturoBet',
-                  phone: u.phone || '',
-                  passwordHash: u.passwordHash || '',
-                  balance: typeof u.balance === 'number' ? u.balance : 0.00,
-                  balanceBonus: typeof u.balanceBonus === 'number' ? u.balanceBonus : 0.00,
-                  createdAt: u.createdAt || new Date().toISOString(),
-                  updatedAt: u.updatedAt || new Date().toISOString(),
-                });
+              const key = u.id || (u.cpf ? u.cpf.replace(/\D/g, '') : '') || k.replace('futurobet_user_', '');
+              if (key && !map.has(key)) {
+                map.set(key, u);
               }
-            } catch (e) {
-              // ignore
             }
           }
         }
-      }
+      } catch (e) {}
 
-      if (localUsers.length > 0) {
-        // Sync to backend
+      const list = Array.from(map.values()).sort((a, b) => {
+        const tA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const tB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        return tB - tA;
+      });
+
+      setUsers(list);
+
+      // Sync back to backend so backend is always in sync
+      if (list.length > 0) {
         fetch('/api/users/sync', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ users: localUsers }),
+          body: JSON.stringify({ users: list }),
         }).catch(() => null);
-
-        // Sync to Firestore
-        localUsers.forEach(async (u) => {
-          if (u.cpf) {
-            try {
-              await setDoc(doc(db, 'users', u.cpf), u, { merge: true });
-            } catch (e) {
-              // ignore
-            }
-          }
-        });
       }
-    } catch (e) {
-      console.warn('Local users discovery note:', e);
+    } catch (err) {
+      console.error('Error fetching users:', err);
+    } finally {
+      setIsLoadingUsers(false);
     }
+  }, [getAdminHeaders]);
 
-    // B) Fetch from Backend periodically
-    const fetchServerUsers = () => {
-      fetch('/api/admin/users', { headers: getAdminHeaders() })
-        .then((r) => {
-          if (r.status === 401) {
-            handleUnauthorized();
-            return null;
-          }
-          if (!r.ok || !r.headers.get('content-type')?.includes('application/json')) {
-            return null;
-          }
-          return r.json();
-        })
+  // 3. Realtime Firestore Users Listener
+  useEffect(() => {
+    if (!isAdminAuthenticated) return;
+
+    fetchAllUsers();
+
+    let unsub: (() => void) | undefined;
+    try {
+      unsub = onSnapshot(collection(db, 'users'), (snap) => {
+        setUsers((prev) => {
+          const map = new Map<string, UserProfile>();
+          prev.forEach((u) => {
+            const k = getUserKey(u);
+            map.set(k, u);
+          });
+
+          snap.forEach((docSnap) => {
+            const d = docSnap.data();
+            const docId = docSnap.id;
+            const userObj: UserProfile = {
+              id: docId,
+              cpf: d.cpf || (docId.startsWith('tel_') ? '' : docId),
+              name: d.name || d.displayName || 'Jogador FuturoBet',
+              phone: d.phone || (docId.startsWith('tel_') ? docId.replace('tel_', '') : ''),
+              passwordHash: d.passwordHash || '',
+              balance: typeof d.balance === 'number' ? d.balance : 0,
+              balanceBonus: typeof d.balanceBonus === 'number' ? d.balanceBonus : 0,
+              createdAt: d.createdAt || '',
+              updatedAt: d.updatedAt || '',
+              email: d.email || '',
+              referralCode: d.referralCode || '',
+            };
+            map.set(docId, { ...map.get(docId), ...userObj });
+          });
+
+          return Array.from(map.values()).sort((a, b) => {
+            const tA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+            const tB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+            return tB - tA;
+          });
+        });
+      }, (err) => {
+        console.warn('Realtime users listener notice:', err);
+      });
+    } catch (e) {}
+
+    return () => {
+      if (unsub) unsub();
+    };
+  }, [isAdminAuthenticated, fetchAllUsers]);
+
+  // 4. Deposits Fetcher & Listener
+  useEffect(() => {
+    if (!isAdminAuthenticated) return;
+
+    const fetchDeposits = () => {
+      fetch('/api/admin/deposits', { headers: getAdminHeaders() })
+        .then((r) => (r.ok ? r.json() : null))
         .then((data) => {
-          if (data && data.success && Array.isArray(data.users)) {
-            setUsers((prev) => {
-              const map = new Map<string, UserProfile>();
-              prev.forEach((u) => map.set(u.cpf.replace(/\D/g, ''), u));
-              data.users.forEach((u: UserProfile) => {
-                const clean = u.cpf.replace(/\D/g, '');
-                if (clean) map.set(clean, { ...map.get(clean), ...u, cpf: clean });
-              });
-              const list = Array.from(map.values());
-              list.sort((a, b) => {
-                const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-                const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-                return timeB - timeA;
-              });
-              return list;
-            });
+          if (data && Array.isArray(data.deposits)) {
+            setDeposits(data.deposits);
           }
         })
         .catch(() => null);
     };
 
-    fetchServerUsers();
-    const interval = setInterval(fetchServerUsers, 3000);
+    fetchDeposits();
 
-    // C) Real-time Firestore Snapshot
+    let unsubDeposits: (() => void) | undefined;
     try {
-      const unsub = onSnapshot(
-        collection(db, 'users'),
-        (snapshot) => {
-          const list: UserProfile[] = [];
-          snapshot.forEach((docSnap) => {
-            list.push({ cpf: docSnap.id, ...docSnap.data() } as UserProfile);
-          });
-
-          // Also sync snapshot users to backend
-          if (list.length > 0) {
-            fetch('/api/users/sync', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ users: list }),
-            }).catch(() => null);
-          }
-
-          setUsers((prev) => {
-            const map = new Map<string, UserProfile>();
-            prev.forEach((u) => map.set(u.cpf.replace(/\D/g, ''), u));
-            list.forEach((u) => {
-              const clean = u.cpf.replace(/\D/g, '');
-              if (clean) map.set(clean, { ...map.get(clean), ...u, cpf: clean });
-            });
-            const merged = Array.from(map.values());
-            merged.sort((a, b) => {
-              const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-              const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-              return timeB - timeA;
-            });
-            return merged;
-          });
-        },
-        (err) => {
-          console.warn('Users snapshot notice:', err);
+      unsubDeposits = onSnapshot(collection(db, 'deposits'), (snap) => {
+        const list: DepositItem[] = [];
+        snap.forEach((d) => {
+          list.push(d.data() as DepositItem);
+        });
+        if (list.length > 0) {
+          list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+          setDeposits(list);
         }
-      );
+      }, () => {});
+    } catch (e) {}
 
-      return () => {
-        clearInterval(interval);
-        unsub();
-      };
-    } catch (e) {
-      console.warn('Users listener notice:', e);
-      return () => clearInterval(interval);
-    }
-  }, [isAdminAuthenticated]);
+    return () => {
+      if (unsubDeposits) unsubDeposits();
+    };
+  }, [isAdminAuthenticated, getAdminHeaders]);
 
-  // Toggle Maintenance Mode
-  const handleToggleMaintenance = async () => {
-    const nextState = !maintenanceMode;
-    setIsSavingMaintenance(true);
-
-    try {
-      // 1. Update Backend
-      await fetch('/api/admin/maintenance', {
-        method: 'POST',
-        headers: getAdminHeaders(),
-        body: JSON.stringify({
-          maintenanceMode: nextState,
-          maintenanceMessage: maintenanceMessage,
-        }),
-      });
-
-      // 2. Update Firestore
-      await setDoc(doc(db, 'system_settings', 'config'), {
-        maintenanceMode: nextState,
-        maintenanceMessage: maintenanceMessage,
-        updatedAt: new Date().toISOString(),
-      });
-
-      setMaintenanceMode(nextState);
-      soundEngine.playCoinDrop();
-      showToast(
-        nextState
-          ? '🔴 CASSINO PAUSADO! Os jogadores verão a tela de manutenção.'
-          : '🟢 CASSINO NO AR! Sistema reaberto para os jogadores.'
-      );
-    } catch (err: any) {
-      showToast('Erro ao atualizar modo manutenção: ' + err.message, 'error');
-    } finally {
-      setIsSavingMaintenance(false);
-    }
+  // Balance Update Handlers
+  const handleQuickAddBalance = async (user: UserProfile, amount: number) => {
+    await executeBalanceChange(user, 'add', amount);
   };
 
-  // Save Custom Maintenance Message
-  const handleSaveMaintenanceMessage = async () => {
-    setIsSavingMaintenance(true);
-    try {
-      await fetch('/api/admin/maintenance', {
-        method: 'POST',
-        headers: getAdminHeaders(),
-        body: JSON.stringify({
-          maintenanceMode,
-          maintenanceMessage,
-        }),
-      });
+  const executeBalanceChange = async (user: UserProfile, mode: 'add' | 'subtract' | 'set' | 'zero', amount: number) => {
+    const userKey = getUserKey(user);
+    const cleanCpf = user.cpf ? user.cpf.replace(/\D/g, '') : '';
+    const cleanPhone = user.phone ? user.phone.replace(/\D/g, '') : '';
 
-      await setDoc(doc(db, 'system_settings', 'config'), {
-        maintenanceMode,
-        maintenanceMessage,
-        updatedAt: new Date().toISOString(),
-      });
-
-      showToast('Mensagem de manutenção salva com sucesso!');
-    } catch (err: any) {
-      showToast('Erro ao salvar mensagem: ' + err.message, 'error');
-    } finally {
-      setIsSavingMaintenance(false);
-    }
-  };
-
-  // Approve Deposit (Manual Action requested by User)
-  const handleApproveDeposit = async (dep: DepositItem) => {
-    const txId = dep.transactionId || dep.id;
-    setProcessingDepositId(txId);
-
-    try {
-      // 1. Notify Backend
-      await fetch('/api/admin/deposits/approve', {
-        method: 'POST',
-        headers: getAdminHeaders(),
-        body: JSON.stringify({ transactionId: txId }),
-      });
-
-      // 2. Update Deposit in Firestore
-      await updateDoc(doc(db, 'deposits', txId), {
-        status: 'APPROVED',
-        approvedAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      }).catch(async () => {
-        await setDoc(
-          doc(db, 'deposits', txId),
-          {
-            ...dep,
-            status: 'APPROVED',
-            approvedAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-          },
-          { merge: true }
-        );
-      });
-
-      // 3. Credit user balance directly in Firestore if CPF is known
-      const cleanCpf = (dep.cpf || '').replace(/\D/g, '');
-      if (cleanCpf) {
-        const userDocRef = doc(db, 'users', cleanCpf);
-        const existingUser = users.find((u) => u.cpf.replace(/\D/g, '') === cleanCpf);
-
-        const currentBal = existingUser?.balance || 0;
-        const currentBonus = existingUser?.balanceBonus || 0;
-        const addAmount = dep.amount || 0;
-        const addBonus = dep.bonusAmount || dep.amount || 0;
-
-        await setDoc(
-          userDocRef,
-          {
-            balance: currentBal + addAmount,
-            balanceBonus: currentBonus + addBonus,
-            updatedAt: new Date().toISOString(),
-          },
-          { merge: true }
-        );
-      }
-
-      // Update local state
-      setDeposits((prev) =>
-        prev.map((d) =>
-          (d.id === txId || d.transactionId === txId)
-            ? { ...d, status: 'APPROVED', approvedAt: new Date().toISOString() }
-            : d
-        )
-      );
-
-      soundEngine.playWinChime();
-      showToast(`Depósito de R$ ${formatBRL(dep.amount)} APROVADO com sucesso para ${dep.clientName}!`);
-    } catch (err: any) {
-      console.error('Erro ao aprovar depósito:', err);
-      showToast('Erro ao aprovar: ' + err.message, 'error');
-    } finally {
-      setProcessingDepositId(null);
-    }
-  };
-
-  // Reject Deposit
-  const handleRejectDeposit = async (dep: DepositItem) => {
-    const txId = dep.transactionId || dep.id;
-    const reason = prompt('Motivo da recusa (opcional):', 'Pagamento não confirmado na conta bancária.');
-    if (reason === null) return;
-
-    setProcessingDepositId(txId);
-    try {
-      await fetch('/api/admin/deposits/reject', {
-        method: 'POST',
-        headers: getAdminHeaders(),
-        body: JSON.stringify({ transactionId: txId, reason }),
-      });
-
-      await updateDoc(doc(db, 'deposits', txId), {
-        status: 'REJECTED',
-        rejectionReason: reason,
-        updatedAt: new Date().toISOString(),
-      }).catch(async () => {
-        await setDoc(
-          doc(db, 'deposits', txId),
-          { ...dep, status: 'REJECTED', rejectionReason: reason, updatedAt: new Date().toISOString() },
-          { merge: true }
-        );
-      });
-
-      setDeposits((prev) =>
-        prev.map((d) =>
-          (d.id === txId || d.transactionId === txId)
-            ? { ...d, status: 'REJECTED', rejectionReason: reason }
-            : d
-        )
-      );
-
-      showToast('Depósito marcado como RECUSADO.', 'info');
-    } catch (err: any) {
-      showToast('Erro ao recusar depósito: ' + err.message, 'error');
-    } finally {
-      setProcessingDepositId(null);
-    }
-  };
-
-  // Update User Balance (Add or Subtract)
-  const handleExecuteBalanceUpdate = async () => {
-    if (!balanceActionModal) return;
-    const { user, type } = balanceActionModal;
-    const amount = parseFloat(balanceAmountInput.replace(',', '.'));
-
-    if (isNaN(amount) || amount <= 0) {
-      showToast('Digite um valor válido maior que zero.', 'error');
-      return;
-    }
+    const currentBal = user.balance || 0;
+    let newBal = currentBal;
+    if (mode === 'add') newBal = parseFloat((currentBal + amount).toFixed(2));
+    else if (mode === 'subtract') newBal = parseFloat((Math.max(0, currentBal - amount)).toFixed(2));
+    else if (mode === 'set') newBal = parseFloat((Math.max(0, amount)).toFixed(2));
+    else if (mode === 'zero') newBal = 0.00;
 
     setIsUpdatingBalance(true);
     try {
-      const cleanCpf = user.cpf.replace(/\D/g, '');
-      const userRef = doc(db, 'users', cleanCpf);
+      // 1. Update Firestore
+      const userRef = doc(db, 'users', userKey);
+      await setDoc(userRef, {
+        ...user,
+        balance: newBal,
+        updatedAt: new Date().toISOString(),
+      }, { merge: true });
 
-      const currentBalance = user.balance || 0;
-      const newBalance = type === 'add' ? currentBalance + amount : Math.max(0, currentBalance - amount);
+      if (cleanCpf && cleanCpf !== userKey) {
+        setDoc(doc(db, 'users', cleanCpf), { balance: newBal, updatedAt: new Date().toISOString() }, { merge: true }).catch(() => null);
+      }
 
-      await setDoc(
-        userRef,
-        {
-          balance: newBalance,
-          updatedAt: new Date().toISOString(),
-        },
-        { merge: true }
-      );
-
-      // Also notify backend
-      fetch('/api/admin/users/update-balance', {
+      // 2. Update Backend
+      await fetch('/api/admin/users/update-balance', {
         method: 'POST',
         headers: getAdminHeaders(),
-        body: JSON.stringify({ cpf: cleanCpf, amount, type }),
+        body: JSON.stringify({
+          id: userKey,
+          cpf: cleanCpf,
+          phone: cleanPhone,
+          amount: amount,
+          type: mode,
+          setBalance: mode === 'set' || mode === 'zero' ? newBal : undefined,
+        }),
       }).catch(() => null);
 
-      soundEngine.playCoinDrop();
-      showToast(
-        `Saldo de ${user.name} atualizado: R$ ${formatBRL(currentBalance)} ➔ R$ ${formatBRL(newBalance)}`
+      // 3. Update Local Storage cache if present
+      const cacheKey = `futurobet_user_${userKey}`;
+      const cached = localStorage.getItem(cacheKey);
+      if (cached) {
+        try {
+          const parsed = JSON.parse(cached);
+          parsed.balance = newBal;
+          localStorage.setItem(cacheKey, JSON.stringify(parsed));
+        } catch (e) {}
+      }
+
+      // 4. Update UI State
+      setUsers((prev) =>
+        prev.map((u) => (getUserKey(u) === userKey ? { ...u, balance: newBal, updatedAt: new Date().toISOString() } : u))
       );
-      setBalanceActionModal(null);
-      setBalanceAmountInput('');
+
+      soundEngine.playCoinDrop();
+      showToast(`Saldo de ${user.name} atualizado para R$ ${formatBRL(newBal)}!`);
+      setBalanceModalUser(null);
+      setBalanceInputAmount('');
     } catch (err: any) {
+      console.error('Error updating balance:', err);
       showToast('Erro ao atualizar saldo: ' + err.message, 'error');
     } finally {
       setIsUpdatingBalance(false);
     }
   };
 
-  // Reset User Password
-  const handleExecutePasswordReset = async () => {
-    if (!passwordResetModal) return;
+  // Password Reset Handlers
+  const handleExecutePasswordChange = async () => {
+    if (!passwordModalUser) return;
     const newPass = newPasswordInput.trim();
-
-    if (!newPass || newPass.length < 4) {
-      showToast('A senha deve conter no mínimo 4 dígitos.', 'error');
+    if (!newPass || newPass.length < 3) {
+      showToast('A senha deve conter no mínimo 3 dígitos.', 'error');
       return;
     }
 
-    setIsResettingPassword(true);
+    const userKey = getUserKey(passwordModalUser);
+    const cleanCpf = passwordModalUser.cpf ? passwordModalUser.cpf.replace(/\D/g, '') : '';
+    const cleanPhone = passwordModalUser.phone ? passwordModalUser.phone.replace(/\D/g, '') : '';
+
+    setIsUpdatingPassword(true);
     try {
-      const cleanCpf = passwordResetModal.cpf.replace(/\D/g, '');
-      const userRef = doc(db, 'users', cleanCpf);
+      // 1. Update Firestore
+      const userRef = doc(db, 'users', userKey);
+      await setDoc(userRef, {
+        passwordHash: newPass,
+        updatedAt: new Date().toISOString(),
+      }, { merge: true });
 
-      await setDoc(
-        userRef,
-        {
-          passwordHash: newPass,
-          updatedAt: new Date().toISOString(),
-        },
-        { merge: true }
-      );
+      if (cleanCpf && cleanCpf !== userKey) {
+        setDoc(doc(db, 'users', cleanCpf), { passwordHash: newPass, updatedAt: new Date().toISOString() }, { merge: true }).catch(() => null);
+      }
 
-      // Also notify backend
-      fetch('/api/admin/users/reset-password', {
+      // 2. Update Backend
+      await fetch('/api/admin/users/reset-password', {
         method: 'POST',
         headers: getAdminHeaders(),
-        body: JSON.stringify({ cpf: cleanCpf, newPassword: newPass }),
+        body: JSON.stringify({
+          id: userKey,
+          cpf: cleanCpf,
+          phone: cleanPhone,
+          newPassword: newPass,
+        }),
       }).catch(() => null);
 
-      const readyMessage = `Olá ${passwordResetModal.name}, sua nova senha de acesso ao FuturoBet é: ${newPass}\nAcesse: https://futurobet.com.br`;
-      setPasswordResetSuccess(readyMessage);
+      // 3. Update Local Storage cache if present
+      const cacheKey = `futurobet_user_${userKey}`;
+      const cached = localStorage.getItem(cacheKey);
+      if (cached) {
+        try {
+          const parsed = JSON.parse(cached);
+          parsed.passwordHash = newPass;
+          localStorage.setItem(cacheKey, JSON.stringify(parsed));
+        } catch (e) {}
+      }
+
+      // 4. Update UI State
+      setUsers((prev) =>
+        prev.map((u) => (getUserKey(u) === userKey ? { ...u, passwordHash: newPass, updatedAt: new Date().toISOString() } : u))
+      );
+
       soundEngine.playWinChime();
-      showToast('Senha redefinida com sucesso!');
+      showToast(`Senha de ${passwordModalUser.name} alterada para: ${newPass}`);
+      setPasswordModalUser(null);
+      setNewPasswordInput('');
     } catch (err: any) {
+      console.error('Error changing password:', err);
       showToast('Erro ao redefinir senha: ' + err.message, 'error');
     } finally {
-      setIsResettingPassword(false);
+      setIsUpdatingPassword(false);
     }
   };
 
-  // Quick Support Lookup by CPF
-  const handleSupportLookup = (e: React.FormEvent) => {
-    e.preventDefault();
-    setSupportLookupError(null);
-    setSupportLookupResult(null);
+  // Delete User Account
+  const handleExecuteDeleteUser = async () => {
+    if (!deleteConfirmUser) return;
+    const userKey = getUserKey(deleteConfirmUser);
+    setIsDeletingUser(true);
+    try {
+      await deleteDoc(doc(db, 'users', userKey)).catch(() => null);
+      if (deleteConfirmUser.cpf) {
+        const cleanCpf = deleteConfirmUser.cpf.replace(/\D/g, '');
+        if (cleanCpf && cleanCpf !== userKey) {
+          await deleteDoc(doc(db, 'users', cleanCpf)).catch(() => null);
+        }
+      }
 
-    const cleanCpf = supportLookupCpf.replace(/\D/g, '');
-    if (!cleanCpf) {
-      setSupportLookupError('Digite um CPF válido.');
-      return;
-    }
-
-    const found = users.find((u) => u.cpf.replace(/\D/g, '') === cleanCpf);
-    if (found) {
-      setSupportLookupResult(found);
+      setUsers((prev) => prev.filter((u) => getUserKey(u) !== userKey));
       soundEngine.playCoinDrop();
-    } else {
-      setSupportLookupError(`Nenhum jogador encontrado com o CPF ${supportLookupCpf}.`);
-      soundEngine.playLockedSound();
+      showToast(`Conta de ${deleteConfirmUser.name} excluída com sucesso.`);
+      setDeleteConfirmUser(null);
+    } catch (err: any) {
+      showToast('Erro ao excluir conta: ' + err.message, 'error');
+    } finally {
+      setIsDeletingUser(false);
     }
   };
 
-  // Filtered lists
-  const filteredDeposits = deposits.filter((d) => {
-    const matchesFilter =
-      depositFilter === 'ALL'
-        ? true
-        : depositFilter === 'PENDING'
-        ? d.status === 'PAID_PENDING_APPROVAL' || d.status === 'WAITING_PAYMENT'
-        : d.status === depositFilter;
+  // Approve Deposit Handler
+  const handleApproveDeposit = async (dep: DepositItem) => {
+    const txId = dep.transactionId || dep.id;
+    setProcessingDepositId(txId);
+    try {
+      await fetch('/api/admin/deposits/approve', {
+        method: 'POST',
+        headers: getAdminHeaders(),
+        body: JSON.stringify({ transactionId: txId }),
+      });
 
-    const query = depositSearch.toLowerCase().trim();
-    const matchesSearch =
-      !query ||
-      (d.clientName || '').toLowerCase().includes(query) ||
-      (d.cpf || '').includes(query) ||
-      (d.transactionId || '').toLowerCase().includes(query);
+      await setDoc(doc(db, 'deposits', txId), {
+        ...dep,
+        status: 'APPROVED',
+        approvedAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      }, { merge: true }).catch(() => null);
 
-    return matchesFilter && matchesSearch;
-  });
+      // Find user and credit balance
+      const cleanCpf = (dep.cpf || '').replace(/\D/g, '');
+      const user = users.find((u) => (u.cpf && u.cpf.replace(/\D/g, '') === cleanCpf) || u.id === cleanCpf);
+      if (user) {
+        await handleQuickAddBalance(user, dep.amount);
+      }
 
-  const filteredUsers = users.filter((u) => {
-    const query = userSearch.toLowerCase().trim();
-    if (!query) return true;
-    return (
-      (u.name || '').toLowerCase().includes(query) ||
-      (u.cpf || '').includes(query) ||
-      (u.phone || '').includes(query)
-    );
-  });
+      setDeposits((prev) =>
+        prev.map((d) => (d.id === txId || d.transactionId === txId ? { ...d, status: 'APPROVED', approvedAt: new Date().toISOString() } : d))
+      );
 
-  const totalPendingDepositsCount = deposits.filter(
-    (d) => d.status === 'PAID_PENDING_APPROVAL' || d.status === 'WAITING_PAYMENT'
-  ).length;
+      soundEngine.playWinChime();
+      showToast(`Depósito de R$ ${formatBRL(dep.amount)} aprovado com sucesso!`);
+    } catch (err: any) {
+      showToast('Erro ao aprovar: ' + err.message, 'error');
+    } finally {
+      setProcessingDepositId(null);
+    }
+  };
 
-  const totalApprovedAmountToday = deposits
-    .filter((d) => d.status === 'APPROVED')
-    .reduce((acc, d) => acc + (d.amount || 0), 0);
+  // Reject Deposit Handler
+  const handleRejectDeposit = async (dep: DepositItem) => {
+    const txId = dep.transactionId || dep.id;
+    setProcessingDepositId(txId);
+    try {
+      await fetch('/api/admin/deposits/reject', {
+        method: 'POST',
+        headers: getAdminHeaders(),
+        body: JSON.stringify({ transactionId: txId, reason: 'Recusado pelo Administrador.' }),
+      });
+
+      await setDoc(doc(db, 'deposits', txId), {
+        ...dep,
+        status: 'REJECTED',
+        rejectionReason: 'Recusado pelo Administrador.',
+        updatedAt: new Date().toISOString(),
+      }, { merge: true }).catch(() => null);
+
+      setDeposits((prev) =>
+        prev.map((d) => (d.id === txId || d.transactionId === txId ? { ...d, status: 'REJECTED' } : d))
+      );
+
+      showToast(`Depósito recusado.`, 'info');
+    } catch (err: any) {
+      showToast('Erro ao recusar: ' + err.message, 'error');
+    } finally {
+      setProcessingDepositId(null);
+    }
+  };
+
+  // Filtered Users
+  const filteredUsers = useMemo(() => {
+    return users.filter((u) => {
+      // Balance filter
+      if (userFilter === 'WITH_BALANCE' && (u.balance || 0) <= 0) return false;
+      if (userFilter === 'ZERO_BALANCE' && (u.balance || 0) > 0) return false;
+
+      // Search filter
+      if (!userSearch.trim()) return true;
+      const q = userSearch.toLowerCase().trim();
+      const matchName = (u.name || '').toLowerCase().includes(q);
+      const matchPhone = (u.phone || '').replace(/\D/g, '').includes(q.replace(/\D/g, '')) || (u.phone || '').includes(q);
+      const matchCpf = (u.cpf || '').replace(/\D/g, '').includes(q.replace(/\D/g, '')) || (u.cpf || '').includes(q);
+      const matchId = (u.id || '').toLowerCase().includes(q);
+      return matchName || matchPhone || matchCpf || matchId;
+    });
+  }, [users, userFilter, userSearch]);
+
+  // Statistics
+  const totalBalanceVolume = useMemo(() => {
+    return users.reduce((sum, u) => sum + (u.balance || 0), 0);
+  }, [users]);
+
+  const pendingDepositsCount = useMemo(() => {
+    return deposits.filter((d) => d.status === 'PAID_PENDING_APPROVAL' || d.status === 'WAITING_PAYMENT').length;
+  }, [deposits]);
 
   // =========================================================================
-  // LOGIN SCREEN (If not authenticated)
+  // VIEW: LOGIN SCREEN (if unauthenticated)
   // =========================================================================
   if (!isAdminAuthenticated) {
     return (
-      <div className="min-h-screen bg-[#07080b] text-white flex flex-col items-center justify-center p-4 relative overflow-hidden font-sans select-none">
-        
-        {/* Glow Effects */}
-        <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-amber-500/10 rounded-full blur-3xl pointer-events-none" />
-
-        <div className="relative z-10 max-w-md w-full bg-[#0d0f16] border border-amber-500/30 rounded-3xl p-6 sm:p-8 shadow-[0_25px_70px_rgba(0,0,0,0.95)] space-y-6">
-          
-          {/* Logo & Header */}
+      <div className="min-h-screen bg-[#07080b] text-white flex flex-col items-center justify-center p-4 relative font-sans select-none">
+        <div className="max-w-md w-full bg-[#0d0f16] border border-amber-500/30 rounded-3xl p-6 sm:p-8 shadow-[0_25px_70px_rgba(0,0,0,0.9)] space-y-6">
           <div className="text-center space-y-2">
-            <div className="inline-flex items-center bg-zinc-900/90 px-3.5 py-1.5 rounded-2xl border border-zinc-800 shadow-inner mb-1">
-              <span className="text-white font-black text-lg tracking-tight">FUTURO</span>
-              <span className="text-amber-400 font-black text-lg tracking-tight ml-1">BET</span>
-              <span className="ml-2 px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400 text-[10px] font-black uppercase tracking-wider">
-                ADM
+            <div className="inline-flex items-center bg-zinc-900 px-3.5 py-1.5 rounded-2xl border border-zinc-800 shadow-inner mb-1">
+              <ShieldCheck className="w-5 h-5 text-amber-400 mr-2" />
+              <span className="text-xs font-black tracking-widest text-zinc-300 uppercase">
+                Área Administrativa
               </span>
             </div>
-            
-            <h2 className="text-xl font-black text-white tracking-tight uppercase">
+            <h1 className="text-2xl font-black tracking-tight text-white">
               Painel de Controle
-            </h2>
+            </h1>
             <p className="text-xs text-zinc-400">
-              Acesso exclusivo para gerenciamento de cassino, aprovação de depósitos e suporte.
+              Gerenciamento de contas, senhas e saldos dos jogadores
             </p>
           </div>
 
-          {/* Form */}
-          <form onSubmit={handleAdminLogin} className="space-y-4">
-            {loginError && (
-              <div className="p-3 bg-red-950/50 border border-red-500/40 rounded-xl text-red-300 text-xs flex items-center gap-2">
-                <AlertTriangle className="w-4 h-4 shrink-0 text-red-400" />
-                <span>{loginError}</span>
-              </div>
-            )}
+          {loginError && (
+            <div className="p-3 bg-red-950/60 border border-red-500/40 rounded-xl text-red-300 text-xs flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 text-red-400 shrink-0" />
+              <span>{loginError}</span>
+            </div>
+          )}
 
-            <div className="space-y-1">
-              <label className="text-[11px] font-black text-zinc-300 uppercase tracking-wider">
-                USUÁRIO
-              </label>
+          <form onSubmit={handleAdminLogin} className="space-y-4">
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-zinc-300">Usuário ADM</label>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-zinc-500">
                   <User className="w-4 h-4" />
                 </div>
                 <input
                   type="text"
-                  required
                   value={usernameInput}
                   onChange={(e) => setUsernameInput(e.target.value)}
-                  placeholder="Digite seu usuário de acesso"
-                  className="w-full pl-10 pr-3.5 py-3 bg-[#13151f] border border-zinc-800 rounded-xl text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-amber-400 transition"
+                  placeholder="copywriter"
+                  required
+                  className="w-full pl-10 pr-4 py-2.5 bg-zinc-900/80 border border-zinc-700/60 rounded-xl text-sm text-white focus:outline-none focus:border-amber-400 transition-colors"
                 />
               </div>
             </div>
 
-            <div className="space-y-1">
-              <label className="text-[11px] font-black text-zinc-300 uppercase tracking-wider">
-                SENHA DE ACESSO
-              </label>
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-zinc-300">Senha ADM</label>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-zinc-500">
-                  <KeyRound className="w-4 h-4" />
+                  <Lock className="w-4 h-4" />
                 </div>
                 <input
-                  type={showPassword ? 'text' : 'password'}
-                  required
+                  type={showLoginPassword ? 'text' : 'password'}
                   value={passwordInput}
                   onChange={(e) => setPasswordInput(e.target.value)}
-                  placeholder="Digite sua senha de acesso"
-                  className="w-full pl-10 pr-10 py-3 bg-[#13151f] border border-zinc-800 rounded-xl text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-amber-400 transition"
+                  placeholder="••••"
+                  required
+                  className="w-full pl-10 pr-10 py-2.5 bg-zinc-900/80 border border-zinc-700/60 rounded-xl text-sm text-white focus:outline-none focus:border-amber-400 transition-colors"
                 />
                 <button
                   type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-zinc-500 hover:text-zinc-300"
+                  onClick={() => setShowLoginPassword(!showLoginPassword)}
+                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-zinc-400 hover:text-zinc-200 cursor-pointer"
                 >
-                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  {showLoginPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
               </div>
             </div>
@@ -875,293 +717,452 @@ export default function AdminPanel({ onBackToCasino }: AdminPanelProps) {
             <button
               type="submit"
               disabled={isLoggingIn}
-              className="w-full py-3.5 bg-gradient-to-r from-amber-400 via-yellow-400 to-amber-500 hover:brightness-110 text-black font-black text-xs uppercase tracking-wider rounded-xl shadow-[0_0_20px_rgba(245,158,11,0.3)] transition-all cursor-pointer flex items-center justify-center gap-2 mt-2 disabled:opacity-60"
+              className="w-full py-3 px-4 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-black font-black rounded-xl text-sm uppercase tracking-wider transition-all shadow-lg hover:shadow-amber-500/20 active:scale-[0.98] disabled:opacity-50 cursor-pointer flex items-center justify-center gap-2"
             >
-              <ShieldCheck className="w-4 h-4" />
-              <span>{isLoggingIn ? 'AUTENTICANDO...' : 'ENTRAR NO PAINEL ADM'}</span>
+              {isLoggingIn ? (
+                <>
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                  <span>Acessando...</span>
+                </>
+              ) : (
+                <>
+                  <KeyRound className="w-4 h-4" />
+                  <span>Entrar no Painel</span>
+                </>
+              )}
             </button>
           </form>
 
-          {/* Back to normal casino button */}
-          <div className="pt-2 text-center">
-            <button
-              onClick={onBackToCasino || (() => { window.location.pathname = '/'; })}
-              className="text-xs text-zinc-500 hover:text-zinc-300 transition cursor-pointer flex items-center justify-center gap-1 mx-auto"
-            >
-              <ArrowLeft className="w-3.5 h-3.5" />
-              <span>Voltar para o Cassino</span>
-            </button>
-          </div>
-
+          {onBackToCasino && (
+            <div className="text-center pt-2">
+              <button
+                onClick={onBackToCasino}
+                className="text-xs text-zinc-400 hover:text-amber-400 transition-colors inline-flex items-center gap-1.5 cursor-pointer"
+              >
+                <ArrowLeft className="w-3.5 h-3.5" />
+                <span>Voltar ao Cassino</span>
+              </button>
+            </div>
+          )}
         </div>
       </div>
     );
   }
 
   // =========================================================================
-  // AUTHENTICATED ADMIN DASHBOARD
+  // VIEW: AUTHENTICATED STREAMLINED ADMIN PANEL
   // =========================================================================
   return (
     <div className="min-h-screen bg-[#08090d] text-white font-sans flex flex-col">
-      
-      {/* Toast Notification */}
-      {statusNotification && (
-        <div
-          className={`fixed top-4 right-4 z-50 px-4 py-3 rounded-2xl shadow-2xl border text-xs font-bold flex items-center gap-2 animate-in slide-in-from-top-4 duration-200 ${
-            statusNotification.type === 'success'
-              ? 'bg-emerald-950/90 border-emerald-500/60 text-emerald-200'
-              : statusNotification.type === 'error'
-              ? 'bg-red-950/90 border-red-500/60 text-red-200'
-              : 'bg-zinc-900/90 border-zinc-700 text-zinc-200'
-          }`}
-        >
-          {statusNotification.type === 'success' && <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />}
-          {statusNotification.type === 'error' && <XCircle className="w-4 h-4 text-red-400 shrink-0" />}
-          {statusNotification.type === 'info' && <Sparkles className="w-4 h-4 text-amber-400 shrink-0" />}
-          <span>{statusNotification.message}</span>
+      {/* TOAST NOTIFICATION */}
+      {toastMessage && (
+        <div className="fixed top-4 right-4 z-50 animate-bounce">
+          <div className={`px-4 py-3 rounded-2xl shadow-2xl border text-sm font-bold flex items-center gap-2.5 ${
+            toastType === 'error'
+              ? 'bg-rose-950 border-rose-500 text-rose-200'
+              : toastType === 'info'
+              ? 'bg-blue-950 border-blue-500 text-blue-200'
+              : 'bg-emerald-950 border-emerald-500 text-emerald-200'
+          }`}>
+            {toastType === 'error' ? <AlertTriangle className="w-4 h-4 text-rose-400" /> : <CheckCircle2 className="w-4 h-4 text-emerald-400" />}
+            <span>{toastMessage}</span>
+          </div>
         </div>
       )}
 
-      {/* TOP ADMIN HEADER BAR */}
-      <header className="bg-[#0e1017] border-b border-zinc-800/80 px-4 sm:px-6 py-3.5 sticky top-0 z-40 backdrop-blur-md">
+      {/* HEADER */}
+      <header className="bg-[#0e1017] border-b border-zinc-800/80 sticky top-0 z-30 px-4 sm:px-6 py-3">
         <div className="max-w-7xl mx-auto flex items-center justify-between gap-3">
-          
-          {/* Logo & Title */}
           <div className="flex items-center gap-3">
-            <div className="flex items-center bg-zinc-900/90 px-3 py-1.5 rounded-2xl border border-zinc-800">
-              <span className="text-white font-black text-sm sm:text-base tracking-tight">FUTURO</span>
-              <span className="text-amber-400 font-black text-sm sm:text-base tracking-tight ml-1">BET</span>
-              <span className="ml-2 px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400 text-[10px] font-black uppercase tracking-wider">
-                ADM
-              </span>
+            <div className="flex items-center bg-zinc-900 px-3 py-1.5 rounded-2xl border border-zinc-800">
+              <ShieldCheck className="w-5 h-5 text-amber-400 mr-2 shrink-0" />
+              <div className="leading-tight">
+                <span className="text-xs sm:text-sm font-black text-amber-400 uppercase tracking-wide">
+                  FuturoBet ADM
+                </span>
+                <span className="hidden sm:inline-block text-[11px] text-zinc-400 ml-2">
+                  Gestão de Contas & Saldos
+                </span>
+              </div>
             </div>
 
-            <div className="hidden sm:block leading-tight">
-              <span className="text-xs text-emerald-400 font-bold flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                Painel Online (Tempo Real)
-              </span>
-              <span className="text-[11px] text-zinc-400 font-medium">Sessão Segura • Administrador</span>
+            {/* Tab switchers: Jogadores & Depósitos */}
+            <div className="flex items-center bg-zinc-900/90 p-1 rounded-xl border border-zinc-800">
+              <button
+                onClick={() => setActiveTab('users')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all flex items-center gap-1.5 cursor-pointer ${
+                  activeTab === 'users'
+                    ? 'bg-amber-400 text-black shadow'
+                    : 'text-zinc-400 hover:text-white'
+                }`}
+              >
+                <Users className="w-3.5 h-3.5" />
+                <span>Jogadores ({users.length})</span>
+              </button>
+
+              <button
+                onClick={() => setActiveTab('deposits')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all flex items-center gap-1.5 cursor-pointer ${
+                  activeTab === 'deposits'
+                    ? 'bg-amber-400 text-black shadow'
+                    : 'text-zinc-400 hover:text-white'
+                }`}
+              >
+                <CreditCard className="w-3.5 h-3.5" />
+                <span>Depósitos</span>
+                {pendingDepositsCount > 0 && (
+                  <span className="px-1.5 py-0.2 bg-amber-400 text-black rounded-full text-[10px] font-black">
+                    {pendingDepositsCount}
+                  </span>
+                )}
+              </button>
             </div>
           </div>
 
-          {/* Quick System Maintenance Badge / Toggle & Logout */}
-          <div className="flex items-center gap-2 sm:gap-3">
-            
-            {/* Quick Maintenance Toggle Button */}
+          <div className="flex items-center gap-2">
             <button
-              onClick={handleToggleMaintenance}
-              disabled={isSavingMaintenance}
-              className={`px-3 py-1.5 rounded-xl font-black text-xs uppercase tracking-wider flex items-center gap-1.5 transition-all cursor-pointer border ${
-                maintenanceMode
-                  ? 'bg-rose-500/20 text-rose-300 border-rose-500/40 hover:bg-rose-500/30'
-                  : 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40 hover:bg-emerald-500/30'
-              }`}
+              onClick={fetchAllUsers}
+              disabled={isLoadingUsers}
+              title="Atualizar lista agora"
+              className="p-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 text-xs font-bold"
             >
-              <Power className={`w-3.5 h-3.5 ${maintenanceMode ? 'text-rose-400 animate-pulse' : 'text-emerald-400'}`} />
-              <span className="hidden sm:inline">
-                {maintenanceMode ? 'CASSINO PAUSADO (MANUTENÇÃO)' : 'CASSINO NO AR (ATIVO)'}
-              </span>
-              <span className="sm:hidden">
-                {maintenanceMode ? 'PAUSADO' : 'ATIVO'}
-              </span>
+              <RefreshCw className={`w-4 h-4 ${isLoadingUsers ? 'animate-spin text-amber-400' : ''}`} />
+              <span className="hidden md:inline">Atualizar</span>
             </button>
 
-            {/* Back to Public Casino */}
-            <button
-              onClick={onBackToCasino || (() => { window.location.pathname = '/'; })}
-              className="px-3 py-1.5 rounded-xl bg-zinc-800/80 hover:bg-zinc-700 text-zinc-300 text-xs font-bold transition flex items-center gap-1 cursor-pointer"
-            >
-              <Eye className="w-3.5 h-3.5" />
-              <span className="hidden md:inline">Ver Cassino</span>
-            </button>
+            {onBackToCasino && (
+              <button
+                onClick={onBackToCasino}
+                className="px-3 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
+              >
+                <ArrowLeft className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Ir ao Cassino</span>
+              </button>
+            )}
 
-            {/* Logout */}
             <button
               onClick={handleAdminLogout}
-              className="px-3 py-1.5 rounded-xl bg-zinc-800/80 hover:bg-red-950/60 hover:text-red-300 text-zinc-400 text-xs font-bold transition flex items-center gap-1 cursor-pointer"
+              className="p-2 bg-red-950/40 hover:bg-red-900/60 text-red-300 border border-red-800/40 rounded-xl transition-all cursor-pointer"
+              title="Sair do painel"
             >
-              <Lock className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Sair</span>
+              <Power className="w-4 h-4" />
             </button>
-
           </div>
-
         </div>
       </header>
 
-      {/* METRIC OVERVIEW CARDS */}
-      <div className="bg-[#0a0c12] border-b border-zinc-800/50 py-4 px-4 sm:px-6">
-        <div className="max-w-7xl mx-auto grid grid-cols-2 md:grid-cols-4 gap-3">
-          
-          {/* Card 1: Fila de Depósitos Pendentes */}
-          <div 
-            onClick={() => { setActiveTab('deposits'); setDepositFilter('PENDING'); }}
-            className={`p-3.5 rounded-2xl border transition-all cursor-pointer ${
-              totalPendingDepositsCount > 0
-                ? 'bg-amber-950/30 border-amber-500/50 hover:bg-amber-950/40 shadow-[0_0_15px_rgba(245,158,11,0.15)]'
-                : 'bg-[#11131c] border-zinc-800 hover:border-zinc-700'
-            }`}
-          >
-            <div className="flex items-center justify-between text-zinc-400 mb-1">
-              <span className="text-[11px] font-black uppercase tracking-wider">Aprovação Manual</span>
-              <Clock className="w-4 h-4 text-amber-400" />
+      {/* QUICK METRICS BAR */}
+      <div className="bg-[#0c0e15] border-b border-zinc-800/60 py-3 px-4 sm:px-6">
+        <div className="max-w-7xl mx-auto grid grid-cols-2 md:grid-cols-3 gap-3">
+          <div className="bg-[#11131c] border border-zinc-800/90 rounded-2xl p-3 flex items-center justify-between">
+            <div>
+              <p className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider">Total de Jogadores</p>
+              <p className="text-xl font-black text-amber-400 mt-0.5">{users.length}</p>
             </div>
-            <div className="flex items-baseline gap-2">
-              <span className="text-2xl font-black text-amber-400 font-mono">
-                {totalPendingDepositsCount}
-              </span>
-              <span className="text-xs text-zinc-400 font-medium">aguardando liberação</span>
+            <div className="w-10 h-10 rounded-xl bg-amber-400/10 border border-amber-400/20 flex items-center justify-center text-amber-400">
+              <Users className="w-5 h-5" />
             </div>
           </div>
 
-          {/* Card 2: Total Aprovado */}
-          <div className="bg-[#11131c] border border-zinc-800 rounded-2xl p-3.5">
-            <div className="flex items-center justify-between text-zinc-400 mb-1">
-              <span className="text-[11px] font-black uppercase tracking-wider">Total Aprovado</span>
-              <DollarSign className="w-4 h-4 text-emerald-400" />
+          <div className="bg-[#11131c] border border-zinc-800/90 rounded-2xl p-3 flex items-center justify-between">
+            <div>
+              <p className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider">Saldo Total em Contas</p>
+              <p className="text-xl font-black text-emerald-400 mt-0.5">R$ {formatBRL(totalBalanceVolume)}</p>
             </div>
-            <div className="flex items-baseline gap-1">
-              <span className="text-xs text-emerald-400 font-bold">R$</span>
-              <span className="text-xl sm:text-2xl font-black text-emerald-400 font-mono">
-                {formatBRL(totalApprovedAmountToday)}
-              </span>
+            <div className="w-10 h-10 rounded-xl bg-emerald-400/10 border border-emerald-400/20 flex items-center justify-center text-emerald-400">
+              <DollarSign className="w-5 h-5" />
             </div>
           </div>
 
-          {/* Card 3: Jogadores Cadastrados */}
-          <div 
-            onClick={() => setActiveTab('users')}
-            className="bg-[#11131c] border border-zinc-800 hover:border-zinc-700 rounded-2xl p-3.5 transition-all cursor-pointer"
-          >
-            <div className="flex items-center justify-between text-zinc-400 mb-1">
-              <span className="text-[11px] font-black uppercase tracking-wider">Jogadores Cadastrados</span>
-              <Users className="w-4 h-4 text-blue-400" />
+          <div className="col-span-2 md:col-span-1 bg-[#11131c] border border-zinc-800/90 rounded-2xl p-3 flex items-center justify-between">
+            <div>
+              <p className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider">Fila de Depósitos PIX</p>
+              <p className="text-xl font-black text-white mt-0.5">
+                {pendingDepositsCount} <span className="text-xs text-amber-400 font-bold">pendente(s)</span>
+              </p>
             </div>
-            <div className="flex items-baseline gap-2">
-              <span className="text-2xl font-black text-white font-mono">
-                {users.length}
-              </span>
-              <span className="text-xs text-zinc-400 font-medium">contas no banco</span>
+            <div className="w-10 h-10 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400">
+              <Clock className="w-5 h-5" />
             </div>
           </div>
-
-          {/* Card 4: Status do Cassino */}
-          <div 
-            onClick={() => setActiveTab('system')}
-            className="bg-[#11131c] border border-zinc-800 hover:border-zinc-700 rounded-2xl p-3.5 transition-all cursor-pointer"
-          >
-            <div className="flex items-center justify-between text-zinc-400 mb-1">
-              <span className="text-[11px] font-black uppercase tracking-wider">Status do Cassino</span>
-              <SlidersHorizontal className="w-4 h-4 text-zinc-400" />
-            </div>
-            <div className="flex items-center gap-1.5 mt-0.5">
-              <span className={`w-2.5 h-2.5 rounded-full ${maintenanceMode ? 'bg-rose-500 animate-ping' : 'bg-emerald-400 animate-pulse'}`} />
-              <span className={`text-sm sm:text-base font-black uppercase ${maintenanceMode ? 'text-rose-400' : 'text-emerald-400'}`}>
-                {maintenanceMode ? 'EM MANUTENÇÃO' : 'ONLINE / ATIVO'}
-              </span>
-            </div>
-          </div>
-
         </div>
       </div>
 
-      {/* NAVIGATION TABS */}
-      <div className="bg-[#0e1017] border-b border-zinc-800 px-4 sm:px-6">
-        <div className="max-w-7xl mx-auto flex items-center gap-2 overflow-x-auto py-2">
-          
-          <button
-            onClick={() => setActiveTab('deposits')}
-            className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2 shrink-0 cursor-pointer ${
-              activeTab === 'deposits'
-                ? 'bg-amber-400 text-black shadow-[0_0_15px_rgba(245,158,11,0.3)]'
-                : 'bg-zinc-800/60 text-zinc-400 hover:text-white hover:bg-zinc-800'
-            }`}
-          >
-            <CreditCard className="w-4 h-4" />
-            <span>Fila de Depósitos PIX</span>
-            {totalPendingDepositsCount > 0 && (
-              <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
-                activeTab === 'deposits' ? 'bg-black text-amber-400' : 'bg-amber-400 text-black'
-              }`}>
-                {totalPendingDepositsCount}
-              </span>
-            )}
-          </button>
-
-          <button
-            onClick={() => setActiveTab('users')}
-            className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2 shrink-0 cursor-pointer ${
-              activeTab === 'users'
-                ? 'bg-amber-400 text-black shadow-[0_0_15px_rgba(245,158,11,0.3)]'
-                : 'bg-zinc-800/60 text-zinc-400 hover:text-white hover:bg-zinc-800'
-            }`}
-          >
-            <Users className="w-4 h-4" />
-            <span>Gerenciar Jogadores & Saldos</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab('support')}
-            className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2 shrink-0 cursor-pointer ${
-              activeTab === 'support'
-                ? 'bg-amber-400 text-black shadow-[0_0_15px_rgba(245,158,11,0.3)]'
-                : 'bg-zinc-800/60 text-zinc-400 hover:text-white hover:bg-zinc-800'
-            }`}
-          >
-            <MessageSquare className="w-4 h-4" />
-            <span>Central de Suporte & Senhas</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab('system')}
-            className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2 shrink-0 cursor-pointer ${
-              activeTab === 'system'
-                ? 'bg-amber-400 text-black shadow-[0_0_15px_rgba(245,158,11,0.3)]'
-                : 'bg-zinc-800/60 text-zinc-400 hover:text-white hover:bg-zinc-800'
-            }`}
-          >
-            <SlidersHorizontal className="w-4 h-4" />
-            <span>Controle do Sistema & Manutenção</span>
-          </button>
-
-        </div>
-      </div>
-
-      {/* ========================================================================= */}
-      {/* TAB CONTENT */}
-      {/* ========================================================================= */}
-      <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 space-y-6">
-        
-        {/* ----------------------------------------------------------------------- */}
-        {/* TAB 1: FILA DE DEPÓSITOS (Aprovação Manual do Usuário) */}
-        {/* ----------------------------------------------------------------------- */}
-        {activeTab === 'deposits' && (
+      {/* MAIN CONTENT */}
+      <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 space-y-4">
+        {/* ===================================================================== */}
+        {/* TAB: JOGADORES (Default, Primary & Ultra Practical) */}
+        {/* ===================================================================== */}
+        {activeTab === 'users' && (
           <div className="space-y-4">
-            
-            {/* Filter and Search Bar */}
-            <div className="bg-[#11131c] border border-zinc-800 rounded-2xl p-4 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-              
+            {/* Search & Filter Bar */}
+            <div className="bg-[#11131c] border border-zinc-800 rounded-2xl p-3.5 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
+              {/* Search */}
+              <div className="relative flex-1">
+                <Search className="w-4 h-4 text-zinc-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  value={userSearch}
+                  onChange={(e) => setUserSearch(e.target.value)}
+                  placeholder="🔍 Buscar por Nome, Telefone, CPF ou ID do jogador..."
+                  className="w-full pl-10 pr-4 py-2 bg-zinc-900/90 border border-zinc-700/60 rounded-xl text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-amber-400 transition-colors"
+                />
+              </div>
+
               {/* Filter Pills */}
-              <div className="flex items-center gap-1.5 overflow-x-auto">
+              <div className="flex items-center gap-1.5 shrink-0 overflow-x-auto">
                 <button
-                  onClick={() => setDepositFilter('PENDING')}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 shrink-0 ${
-                    depositFilter === 'PENDING'
+                  onClick={() => setUserFilter('ALL')}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                    userFilter === 'ALL'
                       ? 'bg-amber-400 text-black font-black shadow'
                       : 'bg-zinc-800/80 text-zinc-300 hover:bg-zinc-700'
                   }`}
                 >
+                  Todos ({users.length})
+                </button>
+                <button
+                  onClick={() => setUserFilter('WITH_BALANCE')}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                    userFilter === 'WITH_BALANCE'
+                      ? 'bg-emerald-500 text-black font-black shadow'
+                      : 'bg-zinc-800/80 text-zinc-300 hover:bg-zinc-700'
+                  }`}
+                >
+                  Com Saldo ({users.filter((u) => (u.balance || 0) > 0).length})
+                </button>
+                <button
+                  onClick={() => setUserFilter('ZERO_BALANCE')}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                    userFilter === 'ZERO_BALANCE'
+                      ? 'bg-zinc-300 text-black font-black shadow'
+                      : 'bg-zinc-800/80 text-zinc-300 hover:bg-zinc-700'
+                  }`}
+                >
+                  Zerados ({users.filter((u) => (u.balance || 0) <= 0).length})
+                </button>
+              </div>
+            </div>
+
+            {/* Users List Table / Cards */}
+            {filteredUsers.length === 0 ? (
+              <div className="bg-[#11131c] border border-zinc-800 rounded-3xl p-12 text-center space-y-3">
+                <div className="w-12 h-12 rounded-2xl bg-zinc-800/60 flex items-center justify-center mx-auto text-zinc-400">
+                  <Users className="w-6 h-6" />
+                </div>
+                <h3 className="text-base font-bold text-zinc-300">Nenhum jogador encontrado</h3>
+                <p className="text-xs text-zinc-500 max-w-sm mx-auto">
+                  {userSearch ? 'Nenhum jogador corresponde aos termos de busca digitados.' : 'Ainda não há jogadores registrados no banco de dados.'}
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {filteredUsers.map((user) => {
+                  const userKey = getUserKey(user);
+                  const isPasswordVisible = visiblePasswords[userKey] || false;
+                  const displayPass = user.passwordHash || 'Não cadastrada';
+                  const cleanPhone = user.phone ? user.phone.trim() : '';
+                  const cleanCpf = user.cpf ? user.cpf.trim() : '';
+
+                  return (
+                    <div
+                      key={userKey}
+                      className="bg-[#11131c] border border-zinc-800/90 hover:border-zinc-700/80 rounded-2xl p-4 transition-all shadow-md flex flex-col lg:flex-row lg:items-center justify-between gap-4"
+                    >
+                      {/* Left: User Identity Info */}
+                      <div className="flex items-start gap-3.5 min-w-[260px]">
+                        <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-amber-500/20 to-amber-700/10 border border-amber-500/30 flex items-center justify-center text-amber-400 font-black text-base shrink-0 mt-0.5">
+                          {(user.name || 'J').charAt(0).toUpperCase()}
+                        </div>
+
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <h3 className="text-sm font-black text-white">{user.name || 'Jogador FuturoBet'}</h3>
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-500/10 border border-emerald-500/30 text-emerald-400">
+                              Ativo
+                            </span>
+                          </div>
+
+                          {/* Phone / CPF / ID info */}
+                          <div className="flex items-center gap-3 text-xs text-zinc-400 flex-wrap">
+                            {cleanPhone && (
+                              <span className="inline-flex items-center gap-1">
+                                <Smartphone className="w-3 h-3 text-zinc-500" />
+                                <strong className="text-zinc-300">{cleanPhone}</strong>
+                                <button
+                                  onClick={() => handleCopy(cleanPhone, `phone_${userKey}`)}
+                                  className="text-zinc-500 hover:text-amber-400 cursor-pointer ml-0.5"
+                                  title="Copiar telefone"
+                                >
+                                  {copiedKey === `phone_${userKey}` ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                                </button>
+                              </span>
+                            )}
+
+                            {cleanCpf && (
+                              <span className="inline-flex items-center gap-1">
+                                <FileText className="w-3 h-3 text-zinc-500" />
+                                <span>CPF: {cleanCpf}</span>
+                              </span>
+                            )}
+
+                            {user.email && (
+                              <span className="text-zinc-500 text-[11px] truncate max-w-[160px]">
+                                {user.email}
+                              </span>
+                            )}
+
+                            {user.createdAt && (
+                              <span className="inline-flex items-center gap-1 text-[11px] text-zinc-500">
+                                <Calendar className="w-3 h-3" />
+                                {new Date(user.createdAt).toLocaleDateString('pt-BR')}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Middle: Password Credentials */}
+                      <div className="bg-[#0b0d13] border border-zinc-800/80 rounded-xl px-3 py-2 flex items-center justify-between gap-3 min-w-[220px]">
+                        <div className="space-y-0.5">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-500 flex items-center gap-1">
+                            <KeyRound className="w-3 h-3 text-amber-400" />
+                            Senha Cadastrada
+                          </span>
+                          <p className="text-xs font-mono font-bold text-amber-300">
+                            {isPasswordVisible ? displayPass : '••••••••'}
+                          </p>
+                        </div>
+
+                        <div className="flex items-center gap-1 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setVisiblePasswords((prev) => ({
+                                ...prev,
+                                [userKey]: !prev[userKey],
+                              }))
+                            }
+                            className="p-1.5 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 rounded-lg transition-colors cursor-pointer"
+                            title={isPasswordVisible ? 'Ocultar senha' : 'Ver senha'}
+                          >
+                            {isPasswordVisible ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => handleCopy(displayPass, `pass_${userKey}`)}
+                            className="p-1.5 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 rounded-lg transition-colors cursor-pointer"
+                            title="Copiar senha"
+                          >
+                            {copiedKey === `pass_${userKey}` ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setPasswordModalUser(user);
+                              setNewPasswordInput('');
+                            }}
+                            className="px-2 py-1 bg-amber-400/10 hover:bg-amber-400/20 text-amber-300 border border-amber-400/30 rounded-lg text-[11px] font-bold transition-all cursor-pointer flex items-center gap-1"
+                            title="Alterar senha do jogador"
+                          >
+                            <Edit3 className="w-3 h-3" />
+                            <span>Alterar</span>
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Right: Balance & Actions */}
+                      <div className="flex items-center justify-between lg:justify-end gap-3 flex-wrap">
+                        {/* Current Balance Display */}
+                        <div className="bg-[#0b0d13] border border-zinc-800/80 rounded-xl px-3.5 py-2 text-right">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-500 block">
+                            Saldo em Conta
+                          </span>
+                          <span className="text-base font-black text-emerald-400 font-mono">
+                            R$ {formatBRL(user.balance || 0)}
+                          </span>
+                        </div>
+
+                        {/* Quick Balance Buttons */}
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            onClick={() => handleQuickAddBalance(user, 10)}
+                            className="px-2.5 py-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 rounded-xl text-xs font-black transition-all cursor-pointer"
+                            title="Adicionar R$ 10 instantâneo"
+                          >
+                            +R$10
+                          </button>
+
+                          <button
+                            onClick={() => handleQuickAddBalance(user, 50)}
+                            className="px-2.5 py-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 rounded-xl text-xs font-black transition-all cursor-pointer"
+                            title="Adicionar R$ 50 instantâneo"
+                          >
+                            +R$50
+                          </button>
+
+                          <button
+                            onClick={() => handleQuickAddBalance(user, 100)}
+                            className="hidden sm:inline-block px-2.5 py-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 rounded-xl text-xs font-black transition-all cursor-pointer"
+                            title="Adicionar R$ 100 instantâneo"
+                          >
+                            +R$100
+                          </button>
+
+                          <button
+                            onClick={() => {
+                              setBalanceModalUser(user);
+                              setBalanceModalMode('add');
+                              setBalanceInputAmount('');
+                            }}
+                            className="px-3 py-1.5 bg-amber-400 hover:bg-amber-300 text-black rounded-xl text-xs font-black transition-all shadow cursor-pointer flex items-center gap-1"
+                            title="Personalizar ou Remover Saldo"
+                          >
+                            <DollarSign className="w-3.5 h-3.5" />
+                            <span>Gerenciar Saldo</span>
+                          </button>
+
+                          <button
+                            onClick={() => setDeleteConfirmUser(user)}
+                            className="p-2 text-zinc-500 hover:text-rose-400 hover:bg-rose-950/40 rounded-xl transition-colors cursor-pointer"
+                            title="Excluir Jogador"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ===================================================================== */}
+        {/* TAB: DEPÓSITOS (Secondary compact queue) */}
+        {/* ===================================================================== */}
+        {activeTab === 'deposits' && (
+          <div className="space-y-4">
+            {/* Filter Pills */}
+            <div className="bg-[#11131c] border border-zinc-800 rounded-2xl p-3.5 flex items-center justify-between gap-3 overflow-x-auto">
+              <div className="flex items-center gap-1.5">
+                <button
+                  onClick={() => setDepositFilter('PENDING')}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                    depositFilter === 'PENDING' ? 'bg-amber-400 text-black font-black' : 'bg-zinc-800/80 text-zinc-300'
+                  }`}
+                >
                   <Clock className="w-3.5 h-3.5" />
-                  <span>Aguardando Aprovação ({deposits.filter((d) => d.status === 'PAID_PENDING_APPROVAL' || d.status === 'WAITING_PAYMENT').length})</span>
+                  <span>Pendentes ({deposits.filter((d) => d.status === 'PAID_PENDING_APPROVAL' || d.status === 'WAITING_PAYMENT').length})</span>
                 </button>
 
                 <button
                   onClick={() => setDepositFilter('APPROVED')}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 shrink-0 ${
-                    depositFilter === 'APPROVED'
-                      ? 'bg-emerald-500 text-black font-black shadow'
-                      : 'bg-zinc-800/80 text-zinc-300 hover:bg-zinc-700'
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                    depositFilter === 'APPROVED' ? 'bg-emerald-500 text-black font-black' : 'bg-zinc-800/80 text-zinc-300'
                   }`}
                 >
                   <CheckCircle2 className="w-3.5 h-3.5" />
@@ -1170,10 +1171,8 @@ export default function AdminPanel({ onBackToCasino }: AdminPanelProps) {
 
                 <button
                   onClick={() => setDepositFilter('REJECTED')}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 shrink-0 ${
-                    depositFilter === 'REJECTED'
-                      ? 'bg-rose-500 text-white font-black shadow'
-                      : 'bg-zinc-800/80 text-zinc-300 hover:bg-zinc-700'
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                    depositFilter === 'REJECTED' ? 'bg-rose-500 text-white font-black' : 'bg-zinc-800/80 text-zinc-300'
                   }`}
                 >
                   <XCircle className="w-3.5 h-3.5" />
@@ -1182,836 +1181,320 @@ export default function AdminPanel({ onBackToCasino }: AdminPanelProps) {
 
                 <button
                   onClick={() => setDepositFilter('ALL')}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 shrink-0 ${
-                    depositFilter === 'ALL'
-                      ? 'bg-zinc-200 text-black font-black'
-                      : 'bg-zinc-800/80 text-zinc-300 hover:bg-zinc-700'
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                    depositFilter === 'ALL' ? 'bg-zinc-200 text-black font-black' : 'bg-zinc-800/80 text-zinc-300'
                   }`}
                 >
                   <span>Todos ({deposits.length})</span>
                 </button>
               </div>
-
-              {/* Search */}
-              <div className="relative w-full sm:w-72">
-                <Search className="w-4 h-4 text-zinc-500 absolute left-3 top-1/2 -translate-y-1/2" />
-                <input
-                  type="text"
-                  placeholder="Buscar por Nome, CPF ou ID..."
-                  value={depositSearch}
-                  onChange={(e) => setDepositSearch(e.target.value)}
-                  className="w-full pl-9 pr-3.5 py-2 bg-[#171924] border border-zinc-800 rounded-xl text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-amber-400"
-                />
-              </div>
-
             </div>
 
             {/* Deposits List */}
-            {filteredDeposits.length === 0 ? (
-              <div className="bg-[#11131c] border border-zinc-800 rounded-2xl p-10 text-center space-y-3">
-                <CheckCircle2 className="w-12 h-12 text-emerald-400 mx-auto opacity-70" />
-                <h3 className="text-base font-bold text-white">Nenhum depósito nesta categoria</h3>
-                <p className="text-xs text-zinc-400 max-w-sm mx-auto">
-                  Quando os jogadores gerarem e pagarem depósitos via PIX SyncPay, eles aparecerão aqui instantaneamente em tempo real.
-                </p>
+            {deposits.filter((d) => {
+              if (depositFilter === 'PENDING') return d.status === 'PAID_PENDING_APPROVAL' || d.status === 'WAITING_PAYMENT';
+              if (depositFilter === 'APPROVED') return d.status === 'APPROVED';
+              if (depositFilter === 'REJECTED') return d.status === 'REJECTED';
+              return true;
+            }).length === 0 ? (
+              <div className="bg-[#11131c] border border-zinc-800 rounded-3xl p-12 text-center space-y-3">
+                <CreditCard className="w-8 h-8 text-zinc-500 mx-auto" />
+                <h3 className="text-base font-bold text-zinc-300">Nenhum depósito nesta categoria</h3>
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
-                {filteredDeposits.map((dep) => {
-                  const txId = dep.transactionId || dep.id;
-                  const isPending = dep.status === 'PAID_PENDING_APPROVAL' || dep.status === 'WAITING_PAYMENT';
-                  const isApproved = dep.status === 'APPROVED';
-                  const isRejected = dep.status === 'REJECTED';
-                  const isProcessingThis = processingDepositId === txId;
+              <div className="space-y-3">
+                {deposits
+                  .filter((d) => {
+                    if (depositFilter === 'PENDING') return d.status === 'PAID_PENDING_APPROVAL' || d.status === 'WAITING_PAYMENT';
+                    if (depositFilter === 'APPROVED') return d.status === 'APPROVED';
+                    if (depositFilter === 'REJECTED') return d.status === 'REJECTED';
+                    return true;
+                  })
+                  .map((dep) => {
+                    const txId = dep.transactionId || dep.id;
+                    const isProcessing = processingDepositId === txId;
+                    const isPending = dep.status === 'PAID_PENDING_APPROVAL' || dep.status === 'WAITING_PAYMENT';
 
-                  return (
-                    <div
-                      key={txId}
-                      className={`bg-[#11131c] border rounded-2xl p-4.5 space-y-3 transition-all relative overflow-hidden ${
-                        isPending
-                          ? 'border-amber-500/50 shadow-[0_0_20px_rgba(245,158,11,0.12)]'
-                          : isApproved
-                          ? 'border-emerald-500/30'
-                          : 'border-zinc-800 opacity-75'
-                      }`}
-                    >
-                      {/* Top Row: User & Status Badge */}
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="space-y-0.5">
-                          <h4 className="text-sm font-black text-white leading-snug">
-                            {dep.clientName || 'Jogador FuturoBet'}
-                          </h4>
-                          <div className="flex items-center gap-2 text-xs text-zinc-400 font-mono">
+                    return (
+                      <div
+                        key={txId}
+                        className="bg-[#11131c] border border-zinc-800 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3"
+                      >
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-black text-white">{dep.clientName || 'Jogador'}</span>
+                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase ${
+                              dep.status === 'APPROVED'
+                                ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
+                                : dep.status === 'REJECTED'
+                                ? 'bg-rose-500/10 text-rose-400 border border-rose-500/30'
+                                : 'bg-amber-400/10 text-amber-400 border border-amber-400/30 animate-pulse'
+                            }`}>
+                              {dep.status === 'APPROVED' ? 'Aprovado' : dep.status === 'REJECTED' ? 'Recusado' : 'Aguardando Aprovação'}
+                            </span>
+                          </div>
+
+                          <div className="text-xs text-zinc-400 flex items-center gap-3">
                             <span>CPF: {dep.cpf || 'Não informado'}</span>
+                            <span>•</span>
+                            <span>{new Date(dep.createdAt).toLocaleString('pt-BR')}</span>
                           </div>
                         </div>
 
-                        {/* Status Badge */}
-                        <div className="shrink-0">
-                          {isPending && (
-                            <span className="px-2.5 py-1 rounded-full bg-amber-500/20 border border-amber-500/40 text-amber-400 text-[10.5px] font-black uppercase tracking-wider flex items-center gap-1 animate-pulse">
-                              <Clock className="w-3 h-3" />
-                              <span>Aguardando ADM</span>
-                            </span>
-                          )}
-                          {isApproved && (
-                            <span className="px-2.5 py-1 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 text-[10.5px] font-black uppercase tracking-wider flex items-center gap-1">
-                              <CheckCircle2 className="w-3 h-3" />
-                              <span>Aprovado</span>
-                            </span>
-                          )}
-                          {isRejected && (
-                            <span className="px-2.5 py-1 rounded-full bg-rose-500/20 border border-rose-500/40 text-rose-400 text-[10.5px] font-black uppercase tracking-wider flex items-center gap-1">
-                              <XCircle className="w-3 h-3" />
-                              <span>Recusado</span>
-                            </span>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Values Grid */}
-                      <div className="grid grid-cols-2 gap-2 bg-[#171924] p-2.5 rounded-xl border border-zinc-800/80">
-                        <div>
-                          <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 block">
-                            VALOR PAGO
-                          </span>
-                          <span className="text-sm font-black text-white font-mono">
+                        <div className="flex items-center gap-3 self-end sm:self-center">
+                          <span className="text-base font-black text-amber-400 font-mono">
                             R$ {formatBRL(dep.amount)}
                           </span>
-                        </div>
-                        <div>
-                          <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-400 block">
-                            TOTAL C/ BÔNUS (100%)
-                          </span>
-                          <span className="text-sm font-black text-emerald-400 font-mono">
-                            R$ {formatBRL(dep.totalAmount || dep.amount * 2)}
-                          </span>
+
+                          {isPending && (
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => handleApproveDeposit(dep)}
+                                disabled={isProcessing}
+                                className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-black font-black text-xs rounded-xl transition-all cursor-pointer flex items-center gap-1"
+                              >
+                                <Check className="w-3.5 h-3.5" />
+                                <span>Aprovar (+R$)</span>
+                              </button>
+
+                              <button
+                                onClick={() => handleRejectDeposit(dep)}
+                                disabled={isProcessing}
+                                className="px-2.5 py-1.5 bg-rose-950/60 hover:bg-rose-900/60 text-rose-300 border border-rose-800/40 text-xs font-bold rounded-xl transition-all cursor-pointer"
+                              >
+                                Recusar
+                              </button>
+                            </div>
+                          )}
                         </div>
                       </div>
-
-                      {/* Details & Timestamp */}
-                      <div className="text-[11px] text-zinc-400 space-y-1">
-                        <div className="flex items-center justify-between">
-                          <span>Data do Pedido:</span>
-                          <span className="font-mono text-zinc-300">
-                            {new Date(dep.createdAt).toLocaleString('pt-BR')}
-                          </span>
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <span>Gateway:</span>
-                          <span className="text-zinc-300 font-bold">API da Sync (SyncPay)</span>
-                        </div>
-                        <div className="flex items-center justify-between text-[10px] font-mono text-zinc-500">
-                          <span className="truncate max-w-[200px]">ID: {txId}</span>
-                          <button
-                            onClick={() => handleCopy(txId, txId)}
-                            className="hover:text-amber-400 cursor-pointer ml-1"
-                          >
-                            {copiedKey === txId ? 'Copiado!' : 'Copiar'}
-                          </button>
-                        </div>
-                      </div>
-
-                      {/* Action Buttons for Pending Deposits */}
-                      {isPending && (
-                        <div className="pt-1 space-y-1.5">
-                          <button
-                            onClick={() => handleApproveDeposit(dep)}
-                            disabled={isProcessingThis}
-                            className="w-full py-2.5 bg-gradient-to-r from-emerald-500 to-green-500 hover:from-emerald-400 hover:to-green-400 text-black font-black text-xs uppercase tracking-wider rounded-xl shadow-[0_0_15px_rgba(16,185,129,0.3)] transition-all cursor-pointer flex items-center justify-center gap-1.5 disabled:opacity-60"
-                          >
-                            <CheckCircle2 className="w-4 h-4 stroke-[2.5]" />
-                            <span>{isProcessingThis ? 'APROVANDO...' : 'APROVAR & CREDITAR SALDO'}</span>
-                          </button>
-
-                          <button
-                            onClick={() => handleRejectDeposit(dep)}
-                            disabled={isProcessingThis}
-                            className="w-full py-1.5 bg-zinc-800/80 hover:bg-rose-950/60 text-zinc-400 hover:text-rose-300 font-bold text-xs uppercase rounded-xl transition cursor-pointer flex items-center justify-center gap-1"
-                          >
-                            <XCircle className="w-3.5 h-3.5" />
-                            <span>Recusar</span>
-                          </button>
-                        </div>
-                      )}
-
-                      {/* Approved Info */}
-                      {isApproved && (
-                        <div className="p-2 bg-emerald-950/30 border border-emerald-500/30 rounded-xl text-center text-xs text-emerald-300 font-bold flex items-center justify-center gap-1">
-                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                          <span>Saldo liberado na conta do jogador</span>
-                        </div>
-                      )}
-
-                    </div>
-                  );
-                })}
+                    );
+                  })}
               </div>
             )}
-
           </div>
         )}
-
-        {/* ----------------------------------------------------------------------- */}
-        {/* TAB 2: GERENCIAR JOGADORES & SALDOS */}
-        {/* ----------------------------------------------------------------------- */}
-        {activeTab === 'users' && (
-          <div className="space-y-4">
-            
-            {/* Header & Search */}
-            <div className="bg-[#11131c] border border-zinc-800 rounded-2xl p-4 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-              <div className="space-y-0.5">
-                <h3 className="text-sm font-black text-white uppercase tracking-wide">
-                  Lista de Jogadores Cadastrados ({users.length})
-                </h3>
-                <p className="text-xs text-zinc-400">
-                  Gerencie saldos em tempo real, adicione bônus e altere senhas de acesso.
-                </p>
-              </div>
-
-              <div className="relative w-full sm:w-80">
-                <Search className="w-4 h-4 text-zinc-500 absolute left-3 top-1/2 -translate-y-1/2" />
-                <input
-                  type="text"
-                  placeholder="Pesquisar por Nome, CPF ou WhatsApp..."
-                  value={userSearch}
-                  onChange={(e) => setUserSearch(e.target.value)}
-                  className="w-full pl-9 pr-3.5 py-2 bg-[#171924] border border-zinc-800 rounded-xl text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-amber-400"
-                />
-              </div>
-            </div>
-
-            {/* Users Table / Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
-              {filteredUsers.map((u) => {
-                const cleanPhone = (u.phone || '').replace(/\D/g, '');
-                const whatsappUrl = cleanPhone ? `https://wa.me/55${cleanPhone}` : null;
-
-                return (
-                  <div
-                    key={u.cpf}
-                    className="bg-[#11131c] border border-zinc-800 rounded-2xl p-4.5 space-y-3.5 hover:border-zinc-700 transition"
-                  >
-                    {/* User Header */}
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="space-y-0.5">
-                        <h4 className="text-sm font-black text-white">
-                          {u.name || 'Jogador Sem Nome'}
-                        </h4>
-                        <p className="text-xs text-zinc-400 font-mono">
-                          CPF: {u.cpf}
-                        </p>
-                      </div>
-
-                      {whatsappUrl && (
-                        <a
-                          href={whatsappUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="px-2.5 py-1 rounded-xl bg-emerald-950/60 border border-emerald-500/40 text-emerald-400 hover:bg-emerald-900/60 text-xs font-bold flex items-center gap-1 transition"
-                        >
-                          <MessageSquare className="w-3.5 h-3.5" />
-                          <span>WhatsApp</span>
-                        </a>
-                      )}
-                    </div>
-
-                    {/* Balances */}
-                    <div className="grid grid-cols-2 gap-2 bg-[#171924] p-3 rounded-xl border border-zinc-800/80">
-                      <div>
-                        <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 block">
-                          SALDO REAL
-                        </span>
-                        <span className="text-base font-black text-emerald-400 font-mono">
-                          R$ {formatBRL(u.balance || 0)}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-[10px] font-bold uppercase tracking-wider text-amber-400 block">
-                          SALDO BÔNUS
-                        </span>
-                        <span className="text-base font-black text-amber-400 font-mono">
-                          R$ {formatBRL(u.balanceBonus || 0)}
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Action Buttons */}
-                    <div className="grid grid-cols-3 gap-2 pt-1">
-                      
-                      {/* Add Balance */}
-                      <button
-                        onClick={() => {
-                          setBalanceActionModal({ user: u, type: 'add' });
-                          setBalanceAmountInput('50');
-                        }}
-                        className="py-2 px-2 bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/40 text-emerald-300 font-bold text-[11px] uppercase rounded-xl transition cursor-pointer flex items-center justify-center gap-1"
-                      >
-                        <Plus className="w-3.5 h-3.5" />
-                        <span>Adicionar</span>
-                      </button>
-
-                      {/* Subtract Balance */}
-                      <button
-                        onClick={() => {
-                          setBalanceActionModal({ user: u, type: 'subtract' });
-                          setBalanceAmountInput('20');
-                        }}
-                        className="py-2 px-2 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-300 font-bold text-[11px] uppercase rounded-xl transition cursor-pointer flex items-center justify-center gap-1"
-                      >
-                        <Minus className="w-3.5 h-3.5" />
-                        <span>Deduzir</span>
-                      </button>
-
-                      {/* Reset Password */}
-                      <button
-                        onClick={() => {
-                          setPasswordResetModal(u);
-                          setNewPasswordInput('123456');
-                          setPasswordResetSuccess(null);
-                        }}
-                        className="py-2 px-2 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 font-bold text-[11px] uppercase rounded-xl transition cursor-pointer flex items-center justify-center gap-1"
-                      >
-                        <KeyRound className="w-3.5 h-3.5" />
-                        <span>Senha</span>
-                      </button>
-
-                    </div>
-
-                  </div>
-                );
-              })}
-            </div>
-
-          </div>
-        )}
-
-        {/* ----------------------------------------------------------------------- */}
-        {/* TAB 3: CENTRAL DE SUPORTE & REDEFINIÇÃO DE SENHAS */}
-        {/* ----------------------------------------------------------------------- */}
-        {activeTab === 'support' && (
-          <div className="max-w-3xl mx-auto space-y-6">
-            
-            {/* Fast CPF Support Lookup */}
-            <div className="bg-[#11131c] border border-zinc-800 rounded-3xl p-6 space-y-5 shadow-lg">
-              <div className="space-y-1">
-                <div className="flex items-center gap-2 text-amber-400 text-sm font-black uppercase">
-                  <KeyRound className="w-4 h-4" />
-                  <span>Atendimento Rápido por CPF</span>
-                </div>
-                <p className="text-xs text-zinc-400">
-                  Quando o jogador pedir suporte no WhatsApp (42) 99968-7965 para redefinir senha ou consultar saldo, digite o CPF dele abaixo:
-                </p>
-              </div>
-
-              <form onSubmit={handleSupportLookup} className="flex gap-2">
-                <input
-                  type="text"
-                  placeholder="Digite o CPF do jogador (ex: 123.456.789-00)..."
-                  value={supportLookupCpf}
-                  onChange={(e) => setSupportLookupCpf(e.target.value)}
-                  className="flex-1 px-4 py-3 bg-[#171924] border border-zinc-800 rounded-2xl text-sm text-white focus:outline-none focus:border-amber-400 font-mono"
-                />
-                <button
-                  type="submit"
-                  className="px-5 py-3 bg-gradient-to-r from-amber-400 to-yellow-400 hover:brightness-110 text-black font-black text-xs uppercase tracking-wider rounded-2xl shadow transition cursor-pointer flex items-center gap-1.5"
-                >
-                  <Search className="w-4 h-4" />
-                  <span>Localizar</span>
-                </button>
-              </form>
-
-              {supportLookupError && (
-                <div className="p-3 bg-red-950/40 border border-red-500/40 rounded-xl text-red-300 text-xs flex items-center gap-2">
-                  <XCircle className="w-4 h-4 shrink-0 text-red-400" />
-                  <span>{supportLookupError}</span>
-                </div>
-              )}
-
-              {/* Found User Card */}
-              {supportLookupResult && (
-                <div className="bg-[#171924] border border-amber-500/40 rounded-2xl p-5 space-y-4 animate-in fade-in duration-200">
-                  <div className="flex items-start justify-between gap-2">
-                    <div>
-                      <h4 className="text-base font-black text-white">{supportLookupResult.name}</h4>
-                      <p className="text-xs text-zinc-400 font-mono">CPF: {supportLookupResult.cpf}</p>
-                      {supportLookupResult.phone && (
-                        <p className="text-xs text-zinc-400">WhatsApp: {supportLookupResult.phone}</p>
-                      )}
-                    </div>
-                    <div className="text-right">
-                      <span className="text-[10px] uppercase font-bold text-zinc-400 block">SALDO ATUAL</span>
-                      <span className="text-lg font-black text-emerald-400 font-mono">
-                        R$ {formatBRL(supportLookupResult.balance || 0)}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-2 pt-2 border-t border-zinc-800">
-                    <button
-                      onClick={() => {
-                        setPasswordResetModal(supportLookupResult);
-                        setNewPasswordInput('123456');
-                        setPasswordResetSuccess(null);
-                      }}
-                      className="flex-1 py-2.5 bg-amber-400 hover:bg-amber-300 text-black font-black text-xs uppercase rounded-xl transition cursor-pointer flex items-center justify-center gap-1.5 shadow"
-                    >
-                      <KeyRound className="w-3.5 h-3.5" />
-                      <span>Redefinir Senha Deste Jogador</span>
-                    </button>
-
-                    <button
-                      onClick={() => {
-                        setBalanceActionModal({ user: supportLookupResult, type: 'add' });
-                        setBalanceAmountInput('50');
-                      }}
-                      className="py-2.5 px-4 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 font-bold text-xs uppercase rounded-xl transition cursor-pointer flex items-center gap-1.5"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                      <span>Ajustar Saldo</span>
-                    </button>
-                  </div>
-                </div>
-              )}
-
-            </div>
-
-            {/* Official Support Number Info */}
-            <div className="bg-[#11131c] border border-zinc-800 rounded-3xl p-6 space-y-3">
-              <h4 className="text-xs font-black uppercase tracking-wider text-zinc-300">
-                Canal Oficial de Atendimento ao Jogador
-              </h4>
-              <div className="flex items-center justify-between p-3.5 bg-[#171924] rounded-2xl border border-zinc-800">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 flex items-center justify-center">
-                    <MessageSquare className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <span className="text-sm font-black text-white block">(42) 9 9968-7965</span>
-                    <span className="text-[11px] text-zinc-400">WhatsApp Oficial de Suporte FuturoBet</span>
-                  </div>
-                </div>
-                <a
-                  href="https://wa.me/5542999687965"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="px-3.5 py-2 bg-emerald-500 hover:bg-emerald-400 text-black font-black text-xs uppercase rounded-xl transition cursor-pointer flex items-center gap-1"
-                >
-                  <ExternalLink className="w-3.5 h-3.5" />
-                  <span>Abrir WhatsApp</span>
-                </a>
-              </div>
-            </div>
-
-          </div>
-        )}
-
-        {/* ----------------------------------------------------------------------- */}
-        {/* TAB 4: CONTROLE DO SISTEMA & MODO MANUTENÇÃO */}
-        {/* ----------------------------------------------------------------------- */}
-        {activeTab === 'system' && (
-          <div className="max-w-3xl mx-auto space-y-6">
-            
-            {/* Maintenance Toggle Card */}
-            <div className={`border rounded-3xl p-6 sm:p-7 space-y-5 transition-all ${
-              maintenanceMode
-                ? 'bg-rose-950/20 border-rose-500/50 shadow-[0_0_30px_rgba(244,63,94,0.15)]'
-                : 'bg-[#11131c] border-zinc-800'
-            }`}>
-              
-              <div className="flex items-start justify-between gap-4">
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2">
-                    <Power className={`w-5 h-5 ${maintenanceMode ? 'text-rose-400' : 'text-emerald-400'}`} />
-                    <h3 className="text-base font-black text-white uppercase tracking-wide">
-                      Pausar Cassino no Ar / Modo Manutenção
-                    </h3>
-                  </div>
-                  <p className="text-xs text-zinc-400 max-w-lg">
-                    Ao ativar este botão, todo o site será pausado para os jogadores e exibirá a tela oficial de manutenção, permitindo que você faça reparos e ajustes com total tranquilidade.
-                  </p>
-                </div>
-
-                <button
-                  onClick={handleToggleMaintenance}
-                  disabled={isSavingMaintenance}
-                  className={`relative w-14 h-8 rounded-full transition-colors cursor-pointer shrink-0 p-1 border ${
-                    maintenanceMode
-                      ? 'bg-rose-500 border-rose-400'
-                      : 'bg-zinc-800 border-zinc-700'
-                  }`}
-                >
-                  <div
-                    className={`w-6 h-6 rounded-full bg-white transition-transform ${
-                      maintenanceMode ? 'translate-x-6' : 'translate-x-0'
-                    }`}
-                  />
-                </button>
-              </div>
-
-              {/* Status Banner */}
-              <div className={`p-4 rounded-2xl border text-xs leading-relaxed flex items-center gap-2.5 ${
-                maintenanceMode
-                  ? 'bg-rose-950/40 border-rose-500/40 text-rose-200'
-                  : 'bg-emerald-950/40 border-emerald-500/40 text-emerald-200'
-              }`}>
-                <ShieldAlert className="w-5 h-5 shrink-0" />
-                <div>
-                  <strong>Status Atual: </strong>
-                  {maintenanceMode ? (
-                    <span>O CASSINO ESTÁ PAUSADO. Jogadores comuns veem a tela de manutenção.</span>
-                  ) : (
-                    <span>O CASSINO ESTÁ NO AR. Jogadores têm acesso normal a depósitos, saques e jogos.</span>
-                  )}
-                </div>
-              </div>
-
-              {/* Maintenance Message Editor */}
-              <div className="space-y-2 pt-2 border-t border-zinc-800">
-                <label className="text-[11px] font-black text-zinc-300 uppercase tracking-wider block">
-                  MENSAGEM EXIBIDA AOS JOGADORES NA TELA DE MANUTENÇÃO:
-                </label>
-                <textarea
-                  rows={3}
-                  value={maintenanceMessage}
-                  onChange={(e) => setMaintenanceMessage(e.target.value)}
-                  className="w-full p-3 bg-[#171924] border border-zinc-800 rounded-xl text-xs text-white placeholder-zinc-600 focus:outline-none focus:border-amber-400 resize-none"
-                  placeholder="Digite a mensagem de manutenção..."
-                />
-
-                <div className="flex justify-end pt-1">
-                  <button
-                    onClick={handleSaveMaintenanceMessage}
-                    disabled={isSavingMaintenance}
-                    className="px-4 py-2 bg-amber-400 hover:bg-amber-300 text-black font-black text-xs uppercase tracking-wider rounded-xl transition cursor-pointer shadow"
-                  >
-                    Salvar Mensagem
-                  </button>
-                </div>
-              </div>
-
-            </div>
-
-            {/* Meta Ads Presell Strategy (Anti-Bloqueio / Loja de Aplicativos) */}
-            <div className="bg-[#11131c] border border-blue-500/40 rounded-3xl p-6 sm:p-7 space-y-5 shadow-[0_0_30px_rgba(59,130,246,0.1)]">
-              <div className="flex items-start justify-between gap-4">
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2">
-                    <Sparkles className="w-5 h-5 text-blue-400" />
-                    <h3 className="text-base font-black text-white uppercase tracking-wide">
-                      Estratégia Anti-Bloqueio Meta Ads (Presell App Store)
-                    </h3>
-                  </div>
-                  <p className="text-xs text-zinc-400 max-w-xl leading-relaxed">
-                    Página inicial alternativa estilo <strong>App Store / Google Play</strong> que evita rejeição de anúncios no Facebook e Instagram.
-                    Visitantes comuns continuam entrando direto na Home do cassino normalmente. Apenas quem clica no link do anúncio verá a tela de download de app!
-                  </p>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    const origin = window.location.origin;
-                    window.open(`${origin}/?download=1`, '_blank');
-                  }}
-                  className="px-3.5 py-2 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs uppercase rounded-xl transition flex items-center gap-1.5 cursor-pointer shrink-0 shadow"
-                >
-                  <ExternalLink className="w-3.5 h-3.5" />
-                  <span>Testar Pré-Landing</span>
-                </button>
-              </div>
-
-              {/* Links Prontos para Copiar */}
-              <div className="space-y-3 pt-2 border-t border-zinc-800 text-xs">
-                <label className="text-[11px] font-black text-zinc-300 uppercase tracking-wider block">
-                  LINKS PARA COLOCAR NOS ANÚNCIOS DO FACEBOOK / INSTAGRAM:
-                </label>
-
-                {/* Link 1: Fortune Tiger */}
-                <div className="p-3 bg-[#171924] rounded-2xl border border-zinc-800 space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <span className="font-bold text-amber-400 flex items-center gap-1.5">
-                      <span>🐯 Campanha Fortune Tiger (Tigrinho):</span>
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const url = `${window.location.origin}/?src=fb&app=tiger`;
-                        navigator.clipboard.writeText(url);
-                        setCopiedPresellLink('tiger');
-                        setTimeout(() => setCopiedPresellLink(null), 2500);
-                      }}
-                      className="px-2.5 py-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded-lg text-[11px] font-bold flex items-center gap-1 transition cursor-pointer"
-                    >
-                      {copiedPresellLink === 'tiger' ? (
-                        <>
-                          <Check className="w-3 h-3 text-emerald-400" />
-                          <span className="text-emerald-400">Copiado!</span>
-                        </>
-                      ) : (
-                        <>
-                          <Copy className="w-3 h-3" />
-                          <span>Copiar Link</span>
-                        </>
-                      )}
-                    </button>
-                  </div>
-                  <div className="font-mono text-[11px] text-zinc-400 truncate bg-black/40 p-2 rounded-lg select-all">
-                    {typeof window !== 'undefined' ? `${window.location.origin}/?src=fb&app=tiger` : '/?src=fb&app=tiger'}
-                  </div>
-                </div>
-
-                {/* Link 2: Fortune Ox */}
-                <div className="p-3 bg-[#171924] rounded-2xl border border-zinc-800 space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <span className="font-bold text-emerald-400 flex items-center gap-1.5">
-                      <span>🐂 Campanha Fortune Ox (Touro):</span>
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const url = `${window.location.origin}/?src=fb&app=ox`;
-                        navigator.clipboard.writeText(url);
-                        setCopiedPresellLink('ox');
-                        setTimeout(() => setCopiedPresellLink(null), 2500);
-                      }}
-                      className="px-2.5 py-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded-lg text-[11px] font-bold flex items-center gap-1 transition cursor-pointer"
-                    >
-                      {copiedPresellLink === 'ox' ? (
-                        <>
-                          <Check className="w-3 h-3 text-emerald-400" />
-                          <span className="text-emerald-400">Copiado!</span>
-                        </>
-                      ) : (
-                        <>
-                          <Copy className="w-3 h-3" />
-                          <span>Copiar Link</span>
-                        </>
-                      )}
-                    </button>
-                  </div>
-                  <div className="font-mono text-[11px] text-zinc-400 truncate bg-black/40 p-2 rounded-lg select-all">
-                    {typeof window !== 'undefined' ? `${window.location.origin}/?src=fb&app=ox` : '/?src=fb&app=ox'}
-                  </div>
-                </div>
-
-                {/* Link 3: Lucky Tiger Gold */}
-                <div className="p-3 bg-[#171924] rounded-2xl border border-zinc-800 space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <span className="font-bold text-yellow-400 flex items-center gap-1.5">
-                      <span>🐯 Campanha Lucky Tiger Gold:</span>
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const url = `${window.location.origin}/?src=fb&app=luckytiger`;
-                        navigator.clipboard.writeText(url);
-                        setCopiedPresellLink('luckytiger');
-                        setTimeout(() => setCopiedPresellLink(null), 2500);
-                      }}
-                      className="px-2.5 py-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded-lg text-[11px] font-bold flex items-center gap-1 transition cursor-pointer"
-                    >
-                      {copiedPresellLink === 'luckytiger' ? (
-                        <>
-                          <Check className="w-3 h-3 text-emerald-400" />
-                          <span className="text-emerald-400">Copiado!</span>
-                        </>
-                      ) : (
-                        <>
-                          <Copy className="w-3 h-3" />
-                          <span>Copiar Link</span>
-                        </>
-                      )}
-                    </button>
-                  </div>
-                  <div className="font-mono text-[11px] text-zinc-400 truncate bg-black/40 p-2 rounded-lg select-all">
-                    {typeof window !== 'undefined' ? `${window.location.origin}/?src=fb&app=luckytiger` : '/?src=fb&app=luckytiger'}
-                  </div>
-                </div>
-
-                {/* Como Funciona a Proteção */}
-                <div className="p-3 bg-blue-950/20 border border-blue-500/20 rounded-xl text-[11px] text-zinc-400 space-y-1">
-                  <span className="text-blue-300 font-bold block">Como os anúncios são protegidos de bloqueio:</span>
-                  <p>1. O robô do Meta revisa a página e enxerga uma página limpa de aplicativo de jogo casual com 4.9 estrelas e sem botões diretos de aposta.</p>
-                  <p>2. Ao clicar em "Obter app", o jogador inicia a instalação, tem seu cadastro aberto com bônus e passa a acessar o cassino completo.</p>
-                  <p>3. Jogadores já cadastrados ou que acessam o link direto do site entram 100% direto na Home do cassino.</p>
-                </div>
-              </div>
-            </div>
-            <div className="bg-[#11131c] border border-zinc-800 rounded-3xl p-6 space-y-4">
-              <h4 className="text-xs font-black uppercase tracking-wider text-zinc-300">
-                Diagnóstico de Integração SyncPay & Banco de Dados
-              </h4>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-                <div className="p-3 bg-[#171924] rounded-xl border border-zinc-800 space-y-1">
-                  <span className="text-zinc-400 block text-[10.5px]">Banco de Dados:</span>
-                  <span className="text-emerald-400 font-bold flex items-center gap-1">
-                    <CheckCircle2 className="w-3.5 h-3.5" /> Firebase Firestore Conectado
-                  </span>
-                </div>
-
-                <div className="p-3 bg-[#171924] rounded-xl border border-zinc-800 space-y-1">
-                  <span className="text-zinc-400 block text-[10.5px]">Gateway de Pagamento:</span>
-                  <span className="text-emerald-400 font-bold flex items-center gap-1">
-                    <CheckCircle2 className="w-3.5 h-3.5" /> API da Sync (SyncPayments Produção)
-                  </span>
-                </div>
-              </div>
-            </div>
-
-          </div>
-        )}
-
       </main>
 
-      {/* ========================================================================= */}
-      {/* MODAL: AJUSTAR SALDO DO JOGADOR */}
-      {/* ========================================================================= */}
-      {balanceActionModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
-          <div className="bg-[#11131c] border border-amber-500/40 rounded-3xl p-6 max-w-sm w-full space-y-4 shadow-2xl">
-            
-            <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
-              <h3 className="text-sm font-black uppercase text-white">
-                {balanceActionModal.type === 'add' ? '➕ Adicionar Saldo' : '➖ Deduzir Saldo'}
-              </h3>
+      {/* ===================================================================== */}
+      {/* MODAL: GERENCIAR SALDO (Adicionar, Subtrair ou Definir) */}
+      {/* ===================================================================== */}
+      {balanceModalUser && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-[#11131c] border border-amber-500/40 rounded-3xl p-6 max-w-md w-full shadow-2xl space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-base font-black text-white">Gerenciar Saldo</h3>
+                <p className="text-xs text-zinc-400">Jogador: {balanceModalUser.name}</p>
+              </div>
               <button
-                onClick={() => setBalanceActionModal(null)}
-                className="text-zinc-500 hover:text-white"
+                onClick={() => setBalanceModalUser(null)}
+                className="p-1.5 text-zinc-400 hover:text-white rounded-lg cursor-pointer"
               >
-                <XCircle className="w-5 h-5" />
+                ✕
               </button>
             </div>
 
-            <div className="space-y-1">
-              <span className="text-xs text-zinc-400">Jogador:</span>
-              <p className="text-sm font-bold text-white">{balanceActionModal.user.name}</p>
-              <p className="text-xs text-zinc-400 font-mono">CPF: {balanceActionModal.user.cpf}</p>
-              <p className="text-xs text-emerald-400 font-mono">
-                Saldo Atual: R$ {formatBRL(balanceActionModal.user.balance || 0)}
+            {/* Current Balance */}
+            <div className="p-3 bg-zinc-900/90 rounded-xl border border-zinc-800 flex items-center justify-between">
+              <span className="text-xs text-zinc-400">Saldo Atual:</span>
+              <span className="text-sm font-black text-emerald-400 font-mono">
+                R$ {formatBRL(balanceModalUser.balance || 0)}
+              </span>
+            </div>
+
+            {/* Mode selection tabs */}
+            <div className="grid grid-cols-3 gap-1 bg-zinc-900 p-1 rounded-xl border border-zinc-800">
+              <button
+                onClick={() => setBalanceModalMode('add')}
+                className={`py-1.5 rounded-lg text-xs font-black transition-all cursor-pointer ${
+                  balanceModalMode === 'add' ? 'bg-emerald-500 text-black' : 'text-zinc-400 hover:text-white'
+                }`}
+              >
+                + Adicionar
+              </button>
+              <button
+                onClick={() => setBalanceModalMode('subtract')}
+                className={`py-1.5 rounded-lg text-xs font-black transition-all cursor-pointer ${
+                  balanceModalMode === 'subtract' ? 'bg-rose-500 text-white' : 'text-zinc-400 hover:text-white'
+                }`}
+              >
+                - Subtrair
+              </button>
+              <button
+                onClick={() => setBalanceModalMode('set')}
+                className={`py-1.5 rounded-lg text-xs font-black transition-all cursor-pointer ${
+                  balanceModalMode === 'set' ? 'bg-amber-400 text-black' : 'text-zinc-400 hover:text-white'
+                }`}
+              >
+                = Definir
+              </button>
+            </div>
+
+            {/* Input amount */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-zinc-300">
+                {balanceModalMode === 'add' ? 'Valor a adicionar (R$):' : balanceModalMode === 'subtract' ? 'Valor a remover (R$):' : 'Novo saldo exato (R$):'}
+              </label>
+              <div className="relative">
+                <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-sm font-bold text-zinc-500">R$</span>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={balanceInputAmount}
+                  onChange={(e) => setBalanceInputAmount(e.target.value)}
+                  placeholder="0,00"
+                  className="w-full pl-10 pr-4 py-2.5 bg-zinc-900 border border-zinc-700 rounded-xl text-base font-bold text-white focus:outline-none focus:border-amber-400"
+                  autoFocus
+                />
+              </div>
+            </div>
+
+            {/* Quick Suggestions */}
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {[10, 20, 50, 100, 200, 500].map((v) => (
+                <button
+                  key={v}
+                  type="button"
+                  onClick={() => setBalanceInputAmount(String(v))}
+                  className="px-2 py-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-lg text-xs font-bold transition-all cursor-pointer"
+                >
+                  R$ {v}
+                </button>
+              ))}
+            </div>
+
+            {/* Action buttons */}
+            <div className="flex items-center gap-2 pt-2">
+              <button
+                onClick={() => executeBalanceChange(balanceModalUser, 'zero', 0)}
+                disabled={isUpdatingBalance}
+                className="px-3 py-2.5 bg-zinc-800 hover:bg-rose-950/60 text-zinc-400 hover:text-rose-300 rounded-xl text-xs font-bold transition-all cursor-pointer"
+              >
+                Zerar Saldo (R$ 0)
+              </button>
+
+              <button
+                onClick={() => {
+                  const val = parseFloat(balanceInputAmount);
+                  if (isNaN(val) || val < 0) {
+                    showToast('Digite um valor numérico válido.', 'error');
+                    return;
+                  }
+                  executeBalanceChange(balanceModalUser, balanceModalMode, val);
+                }}
+                disabled={isUpdatingBalance || !balanceInputAmount}
+                className="flex-1 py-2.5 bg-amber-400 hover:bg-amber-300 text-black font-black text-xs uppercase tracking-wider rounded-xl transition-all shadow cursor-pointer disabled:opacity-50"
+              >
+                {isUpdatingBalance ? 'Salvando...' : 'Confirmar Atualização'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ===================================================================== */}
+      {/* MODAL: ALTERAR SENHA DO JOGADOR */}
+      {/* ===================================================================== */}
+      {passwordModalUser && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-[#11131c] border border-amber-500/40 rounded-3xl p-6 max-w-md w-full shadow-2xl space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-base font-black text-white flex items-center gap-1.5">
+                  <KeyRound className="w-4 h-4 text-amber-400" />
+                  <span>Alterar Senha do Jogador</span>
+                </h3>
+                <p className="text-xs text-zinc-400">Jogador: {passwordModalUser.name}</p>
+              </div>
+              <button
+                onClick={() => setPasswordModalUser(null)}
+                className="p-1.5 text-zinc-400 hover:text-white rounded-lg cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="p-3 bg-zinc-900/90 rounded-xl border border-zinc-800 flex items-center justify-between">
+              <span className="text-xs text-zinc-400">Senha Atual:</span>
+              <span className="text-xs font-mono font-bold text-amber-300">
+                {passwordModalUser.passwordHash || 'Não cadastrada'}
+              </span>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-zinc-300">Nova Senha de Acesso:</label>
+              <input
+                type="text"
+                value={newPasswordInput}
+                onChange={(e) => setNewPasswordInput(e.target.value)}
+                placeholder="Ex: 123456 ou nova senha"
+                className="w-full px-4 py-2.5 bg-zinc-900 border border-zinc-700 rounded-xl text-sm font-bold text-white focus:outline-none focus:border-amber-400 font-mono"
+                autoFocus
+              />
+              <p className="text-[11px] text-zinc-500">
+                O jogador poderá entrar imediatamente com esta nova senha no celular ou computador.
               </p>
             </div>
 
-            <div className="space-y-1.5">
-              <label className="text-[11px] font-black text-zinc-300 uppercase">
-                VALOR A {balanceActionModal.type === 'add' ? 'ADICIONAR' : 'DEDUZIR'} (R$):
-              </label>
-              <input
-                type="number"
-                step="any"
-                value={balanceAmountInput}
-                onChange={(e) => setBalanceAmountInput(e.target.value)}
-                placeholder="Ex: 50.00"
-                className="w-full px-3.5 py-3 bg-[#171924] border border-zinc-800 rounded-xl text-base font-mono text-white focus:outline-none focus:border-amber-400"
-              />
-            </div>
-
-            <div className="flex gap-2 pt-2">
+            <div className="flex items-center gap-2 pt-2">
               <button
-                onClick={() => setBalanceActionModal(null)}
-                className="flex-1 py-2.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-bold text-xs uppercase rounded-xl transition"
+                onClick={() => setPasswordModalUser(null)}
+                className="flex-1 py-2.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-xl text-xs font-bold cursor-pointer"
               >
                 Cancelar
               </button>
+
               <button
-                onClick={handleExecuteBalanceUpdate}
-                disabled={isUpdatingBalance}
-                className="flex-1 py-2.5 bg-gradient-to-r from-amber-400 to-yellow-400 hover:brightness-110 text-black font-black text-xs uppercase rounded-xl shadow transition"
+                onClick={handleExecutePasswordChange}
+                disabled={isUpdatingPassword || !newPasswordInput.trim()}
+                className="flex-1 py-2.5 bg-amber-400 hover:bg-amber-300 text-black font-black text-xs uppercase tracking-wider rounded-xl transition-all shadow cursor-pointer disabled:opacity-50"
               >
-                {isUpdatingBalance ? 'Salvando...' : 'Confirmar'}
+                {isUpdatingPassword ? 'Salvando...' : 'Salvar Nova Senha'}
               </button>
             </div>
-
           </div>
         </div>
       )}
 
-      {/* ========================================================================= */}
-      {/* MODAL: REDEFINIR SENHA DO JOGADOR */}
-      {/* ========================================================================= */}
-      {passwordResetModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
-          <div className="bg-[#11131c] border border-amber-500/40 rounded-3xl p-6 max-w-md w-full space-y-4 shadow-2xl">
-            
-            <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
-              <h3 className="text-sm font-black uppercase text-white flex items-center gap-2">
-                <KeyRound className="w-4 h-4 text-amber-400" />
-                <span>Redefinir Senha do Jogador</span>
-              </h3>
-              <button
-                onClick={() => setPasswordResetModal(null)}
-                className="text-zinc-500 hover:text-white"
-              >
-                <XCircle className="w-5 h-5" />
-              </button>
+      {/* ===================================================================== */}
+      {/* MODAL: CONFIRMAR EXCLUSÃO DE CONTA */}
+      {/* ===================================================================== */}
+      {deleteConfirmUser && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-[#11131c] border border-rose-500/40 rounded-3xl p-6 max-w-md w-full shadow-2xl space-y-4 text-center">
+            <div className="w-12 h-12 rounded-2xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-rose-400 mx-auto">
+              <Trash2 className="w-6 h-6" />
             </div>
 
             <div className="space-y-1">
-              <span className="text-xs text-zinc-400">Jogador:</span>
-              <p className="text-sm font-bold text-white">{passwordResetModal.name}</p>
-              <p className="text-xs text-zinc-400 font-mono">CPF: {passwordResetModal.cpf}</p>
+              <h3 className="text-base font-black text-white">Excluir Conta do Jogador?</h3>
+              <p className="text-xs text-zinc-400">
+                Tem certeza que deseja remover a conta de <strong className="text-white">{deleteConfirmUser.name}</strong>? Esta ação removerá o acesso do jogador.
+              </p>
             </div>
 
-            <div className="space-y-1.5">
-              <label className="text-[11px] font-black text-zinc-300 uppercase">
-                NOVA SENHA DE ACESSO:
-              </label>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={newPasswordInput}
-                  onChange={(e) => setNewPasswordInput(e.target.value)}
-                  placeholder="Digite a nova senha..."
-                  className="flex-1 px-3.5 py-2.5 bg-[#171924] border border-zinc-800 rounded-xl text-sm font-mono text-white focus:outline-none focus:border-amber-400"
-                />
-                <button
-                  type="button"
-                  onClick={() => setNewPasswordInput(String(Math.floor(100000 + Math.random() * 900000)))}
-                  className="px-3 py-2 bg-zinc-800 hover:bg-zinc-700 text-xs font-bold text-zinc-300 rounded-xl transition"
-                >
-                  Gerar 6 dígitos
-                </button>
-              </div>
-            </div>
-
-            {passwordResetSuccess && (
-              <div className="p-3 bg-emerald-950/50 border border-emerald-500/40 rounded-xl space-y-2">
-                <span className="text-xs text-emerald-300 font-bold block">
-                  ✓ Senha alterada! Copie a mensagem pronta para enviar no WhatsApp do jogador:
-                </span>
-                <div className="p-2 bg-black/50 rounded-lg text-xs font-mono text-zinc-300 select-all break-words">
-                  {passwordResetSuccess}
-                </div>
-                <button
-                  onClick={() => handleCopy(passwordResetSuccess, 'readyMessage')}
-                  className="w-full py-2 bg-emerald-500 hover:bg-emerald-400 text-black font-black text-xs uppercase rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer shadow"
-                >
-                  <Copy className="w-3.5 h-3.5" />
-                  <span>{copiedKey === 'readyMessage' ? 'COPIADO COM SUCESSO!' : 'COPIAR MENSAGEM DO WHATSAPP'}</span>
-                </button>
-              </div>
-            )}
-
-            <div className="flex gap-2 pt-2">
+            <div className="flex items-center gap-2 pt-2">
               <button
-                onClick={() => setPasswordResetModal(null)}
-                className="flex-1 py-2.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-bold text-xs uppercase rounded-xl transition"
+                onClick={() => setDeleteConfirmUser(null)}
+                disabled={isDeletingUser}
+                className="flex-1 py-2.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-xl text-xs font-bold cursor-pointer"
               >
-                Fechar
+                Cancelar
               </button>
+
               <button
-                onClick={handleExecutePasswordReset}
-                disabled={isResettingPassword}
-                className="flex-1 py-2.5 bg-gradient-to-r from-amber-400 to-yellow-400 hover:brightness-110 text-black font-black text-xs uppercase rounded-xl shadow transition"
+                onClick={handleExecuteDeleteUser}
+                disabled={isDeletingUser}
+                className="flex-1 py-2.5 bg-rose-600 hover:bg-rose-500 text-white font-black text-xs uppercase tracking-wider rounded-xl transition-all shadow cursor-pointer disabled:opacity-50"
               >
-                {isResettingPassword ? 'Alterando...' : 'Salvar Nova Senha'}
+                {isDeletingUser ? 'Excluindo...' : 'Sim, Excluir Conta'}
               </button>
             </div>
-
           </div>
         </div>
       )}
-
     </div>
   );
 }
