@@ -316,7 +316,7 @@ export const GAMES_CATALOG: GameConfig[] = [
     bgImage: goldenRetrieverImg,
     badge: 'NOVO',
     accentColor: '#eab308',
-    demoUrl: 'https://demogamesfree.pragmaticplay.net/gs2c/openGame.do?gameSymbol=vs10gretriever&lang=pt&cur=BRL',
+    demoUrl: 'https://demogamesfree.pragmaticplay.net/gs2c/openGame.do?gameSymbol=vs20doghouse&lang=pt&cur=BRL',
   },
   {
     id: 'harvest-moon',
@@ -329,7 +329,7 @@ export const GAMES_CATALOG: GameConfig[] = [
     bgImage: harvestMoonImg,
     badge: 'NOVO',
     accentColor: '#8b5cf6',
-    demoUrl: 'https://demogamesfree.pragmaticplay.net/gs2c/openGame.do?gameSymbol=vs15harvestm&lang=pt&cur=BRL',
+    demoUrl: 'https://demogamesfree.pragmaticplay.net/gs2c/openGame.do?gameSymbol=vs20daydead&lang=pt&cur=BRL',
   },
   {
     id: '777-wheel-blitz',
@@ -342,7 +342,7 @@ export const GAMES_CATALOG: GameConfig[] = [
     bgImage: wheelBlitzImg,
     badge: 'HOT',
     accentColor: '#3b82f6',
-    demoUrl: 'https://demogamesfree.pragmaticplay.net/gs2c/openGame.do?gameSymbol=vs5wheelblitz&lang=pt&cur=BRL',
+    demoUrl: 'https://demogamesfree.pragmaticplay.net/gs2c/openGame.do?gameSymbol=vs10firestrike&lang=pt&cur=BRL',
   },
   {
     id: 'super-serge',
@@ -355,7 +355,7 @@ export const GAMES_CATALOG: GameConfig[] = [
     bgImage: superSergeImg,
     badge: 'TURBO',
     accentColor: '#f59e0b',
-    demoUrl: 'https://demogamesfree.pragmaticplay.net/gs2c/openGame.do?gameSymbol=vswaysserge&lang=pt&cur=BRL',
+    demoUrl: 'https://demogamesfree.pragmaticplay.net/gs2c/openGame.do?gameSymbol=vswaysbufking&lang=pt&cur=BRL',
   },
   {
     id: 'jade-legends',
@@ -368,7 +368,7 @@ export const GAMES_CATALOG: GameConfig[] = [
     bgImage: jadeLegendsImg,
     badge: 'NOVO',
     accentColor: '#10b981',
-    demoUrl: 'https://demogamesfree.pragmaticplay.net/gs2c/openGame.do?gameSymbol=vs20jadeleg&lang=pt&cur=BRL',
+    demoUrl: 'https://demogamesfree.pragmaticplay.net/gs2c/openGame.do?gameSymbol=vswayslions&lang=pt&cur=BRL',
   },
   {
     id: 'death-dominion',
@@ -381,7 +381,7 @@ export const GAMES_CATALOG: GameConfig[] = [
     bgImage: deathDominionImg,
     badge: 'HOT',
     accentColor: '#6366f1',
-    demoUrl: 'https://demogamesfree.pragmaticplay.net/gs2c/openGame.do?gameSymbol=vs20deathdom&lang=pt&cur=BRL',
+    demoUrl: 'https://demogamesfree.pragmaticplay.net/gs2c/openGame.do?gameSymbol=vswayswerewolf&lang=pt&cur=BRL',
   },
   {
     id: 'sunnydaze-asylum',
@@ -394,7 +394,7 @@ export const GAMES_CATALOG: GameConfig[] = [
     bgImage: sunnydazeAsylumImg,
     badge: 'TURBO',
     accentColor: '#ec4899',
-    demoUrl: 'https://demogamesfree.pragmaticplay.net/gs2c/openGame.do?gameSymbol=vswayssunny&lang=pt&cur=BRL',
+    demoUrl: 'https://demogamesfree.pragmaticplay.net/gs2c/openGame.do?gameSymbol=vs20wildboost&lang=pt&cur=BRL',
   },
   {
     id: 'sleeping-dragon-ultra-dark',
@@ -407,7 +407,7 @@ export const GAMES_CATALOG: GameConfig[] = [
     bgImage: sleepingDragonImg,
     badge: 'HOT',
     accentColor: '#eab308',
-    demoUrl: 'https://demogamesfree.pragmaticplay.net/gs2c/openGame.do?gameSymbol=vs10sleepdrag&lang=pt&cur=BRL',
+    demoUrl: 'https://demogamesfree.pragmaticplay.net/gs2c/openGame.do?gameSymbol=vs10floatdrg&lang=pt&cur=BRL',
   },
 ];
 
