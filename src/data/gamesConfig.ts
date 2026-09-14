@@ -1,14 +1,14 @@
-import goldenRetrieverImg from '../assets/images/golden_retriever_slot_1788618982056.jpg';
-import harvestMoonImg from '../assets/images/harvest_moon_slot_1788619009752.jpg';
-import wheelBlitzImg from '../assets/images/wheel_blitz_slot_1788619037026.jpg';
-import superSergeImg from '../assets/images/super_serge_slot_1788619055268.jpg';
-import jadeLegendsImg from '../assets/images/jade_legends_slot_1788619067857.jpg';
-import deathDominionImg from '../assets/images/death_dominion_slot_1788619080433.jpg';
-import sunnydazeAsylumImg from '../assets/images/sunnydaze_asylum_slot_1788619094689.jpg';
-import sleepingDragonImg from '../assets/images/sleeping_dragon_slot_1788619111222.jpg';
-import luckyTigerGoldImg from '../assets/images/lucky_tiger_gold_slot_1788738484588.jpg';
-import sevenRushImg from '../assets/images/seven_rush_slot_1788738497552.jpg';
-import bingoManiaImg from '../assets/images/bingo_mania_slot_1788738511110.jpg';
+import goldenRetrieverImg from '../assets/images/opt/golden_retriever_slot_1788618982056.webp';
+import harvestMoonImg from '../assets/images/opt/harvest_moon_slot_1788619009752.webp';
+import wheelBlitzImg from '../assets/images/opt/wheel_blitz_slot_1788619037026.webp';
+import superSergeImg from '../assets/images/opt/super_serge_slot_1788619055268.webp';
+import jadeLegendsImg from '../assets/images/opt/jade_legends_slot_1788619067857.webp';
+import deathDominionImg from '../assets/images/opt/death_dominion_slot_1788619080433.webp';
+import sunnydazeAsylumImg from '../assets/images/opt/sunnydaze_asylum_slot_1788619094689.webp';
+import sleepingDragonImg from '../assets/images/opt/sleeping_dragon_slot_1788619111222.webp';
+import luckyTigerGoldImg from '../assets/images/opt/lucky_tiger_gold_slot_1788738484588.webp';
+import sevenRushImg from '../assets/images/opt/seven_rush_slot_1788738497552.webp';
+import bingoManiaImg from '../assets/images/opt/bingo_mania_slot_1788738511110.webp';
 
 export interface GameConfig {
   id: string;
@@ -128,11 +128,16 @@ export const PROMOTIONS: PromotionConfig[] = [
 ];
 
 export const LIVE_WINNERS: LiveWinner[] = [
-  { id: '1', user: 'Lucas M.***', amount: 'R$ 3.840,00', game: 'Gates of Olympus', icon: '🏛️', time: 'Agora' },
-  { id: '2', user: 'Ana P.***', amount: 'R$ 1.250,50', game: 'Sugar Rush 1000', icon: '🍬', time: '1m atrás' },
-  { id: '3', user: 'Gabriel S.***', amount: 'R$ 8.900,00', game: 'Aviator', icon: '✈️', time: '2m atrás' },
-  { id: '4', user: 'Carla R.***', amount: 'R$ 500,00', game: 'Fortune Tiger', icon: '🐯', time: '3m atrás' },
-  { id: '5', user: 'Felipe C.***', amount: 'R$ 12.450,00', game: 'Starlight Princess 1000', icon: '✨', time: '5m atrás' },
+  { id: '1', user: 'Felipe C.', amount: 'R$ 300,00', game: 'Fortune Tiger', icon: '⚡', time: 'Agora' },
+  { id: '2', user: 'Jhonata', amount: 'R$ 50,00', game: 'Aviator', icon: '⚡', time: '1m atrás' },
+  { id: '3', user: 'Teresinha M.', amount: 'R$ 500,00', game: 'Gates of Olympus', icon: '⚡', time: '2m atrás' },
+  { id: '4', user: 'Rodrigo B.', amount: 'R$ 1.200,00', game: 'Lucky Tiger Gold', icon: '⚡', time: '2m atrás' },
+  { id: '5', user: 'Camila S.', amount: 'R$ 380,00', game: 'Mines VIP', icon: '⚡', time: '3m atrás' },
+  { id: '6', user: 'Marcos V.', amount: 'R$ 120,00', game: '777 Rush', icon: '⚡', time: '4m atrás' },
+  { id: '7', user: 'Sônia R.', amount: 'R$ 750,00', game: 'Sugar Rush 1000', icon: '⚡', time: '4m atrás' },
+  { id: '8', user: 'Eduardo F.', amount: 'R$ 90,00', game: 'Bingo Mania', icon: '⚡', time: '5m atrás' },
+  { id: '9', user: 'Luciana K.', amount: 'R$ 1.150,00', game: 'Fortune Ox', icon: '⚡', time: '6m atrás' },
+  { id: '10', user: 'Valter N.', amount: 'R$ 250,00', game: 'Dragon Hatch', icon: '⚡', time: '7m atrás' },
 ];
 
 export const GAMES_CATALOG: GameConfig[] = [

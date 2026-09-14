@@ -37,9 +37,12 @@ export default function BannerCarousel({ onSelectGame, onOpenDeposit }: BannerCa
 
   return (
     <div className="w-full relative px-3 pt-2 select-none">
-      {/* Perfectly proportioned Modern Casino Hero Banner */}
-      <div className="relative w-full aspect-[2.4/1] sm:aspect-[2.8/1] min-h-[135px] max-h-[155px] rounded-xl overflow-hidden border border-[#1e2c47] hover:border-amber-400/60 bg-[#080e1a] shadow-lg group cursor-pointer">
+      {/* Perfectly proportioned Modern Casino Hero Banner with Gold Pulse & Light Sweep */}
+      <div className="relative w-full aspect-[2.4/1] sm:aspect-[2.8/1] min-h-[135px] max-h-[155px] rounded-xl overflow-hidden border border-amber-500/40 animate-gold-glow bg-[#080e1a] shadow-lg group cursor-pointer">
         
+        {/* Dynamic Golden Laser Sweep (efeito de feixe de luz passando) */}
+        <div className="absolute inset-y-0 w-32 bg-gradient-to-r from-transparent via-amber-300/25 to-transparent pointer-events-none z-30 animate-light-sweep" />
+
         {/* Carousel Slide Items */}
         {HERO_BANNERS.map((b, idx) => (
           <div

@@ -10,22 +10,32 @@ interface GameCardProps {
 
 export default function GameCard({ game, onSelect }: GameCardProps) {
   const [imgError, setImgError] = useState(false);
+  const isHot = game.badge === 'HOT' || game.badge === 'POPULAR' || game.badge === 'TURBO';
 
   return (
     <div
       onClick={() => onSelect(game.name)}
-      className="group relative bg-[#0d1424] border border-[#1b2942] hover:border-amber-400/80 rounded-xl overflow-hidden cursor-pointer shadow-md hover:shadow-[0_6px_20px_rgba(245,158,11,0.25)] transition-all duration-200 hover:-translate-y-1 select-none flex flex-col"
+      className={`group relative bg-[#0d1424] rounded-xl overflow-hidden cursor-pointer shadow-md transition-all duration-200 hover:-translate-y-1 select-none flex flex-col ${
+        isHot
+          ? 'border border-amber-500/50 hover:border-amber-300 shadow-[0_0_12px_rgba(245,158,11,0.2)] hover:shadow-[0_0_20px_rgba(245,158,11,0.5)]'
+          : 'border border-[#1b2942] hover:border-amber-400/80 hover:shadow-[0_6px_20px_rgba(245,158,11,0.25)]'
+      }`}
     >
       {/* Game Artwork Poster (Proporção 3:4 Padrão Internacional de Cassino) */}
       <div className="w-full aspect-[3/4] relative overflow-hidden bg-[#070c18] flex items-center justify-center">
+        {/* Subtle Sheen on Hot Games */}
+        {isHot && (
+          <div className="absolute inset-y-0 w-20 bg-gradient-to-r from-transparent via-amber-300/15 to-transparent pointer-events-none z-20 animate-light-sweep" />
+        )}
+
         {!imgError ? (
           <img
             src={game.bgImage}
             alt={game.name}
             referrerPolicy="no-referrer"
+            decoding="async"
             onError={() => setImgError(true)}
             className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-300 ease-out"
-            loading="lazy"
           />
         ) : (
           /* Styled Fallback Cover Card if image fails to load */

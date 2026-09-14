@@ -11,10 +11,13 @@ export default function RoletaBanner({ onOpenWheel }: RoletaBannerProps) {
     <div className="w-full px-3 pt-2 select-none">
       <div
         onClick={onOpenWheel}
-        className="w-full relative bg-gradient-to-r from-[#071330] via-[#09183d] to-[#040e24] border border-amber-500/40 hover:border-amber-400 rounded-2xl shadow-lg transition-all duration-200 cursor-pointer overflow-hidden group p-3.5"
+        className="w-full relative bg-gradient-to-r from-[#071330] via-[#09183d] to-[#040e24] border border-amber-500/50 hover:border-amber-400 rounded-2xl shadow-lg transition-all duration-200 cursor-pointer overflow-hidden group p-3.5"
       >
         {/* Glow halo */}
         <div className="absolute -top-10 -left-10 w-32 h-32 bg-amber-500/20 rounded-full blur-2xl pointer-events-none" />
+
+        {/* Dynamic Golden Laser Sweep */}
+        <div className="absolute inset-y-0 w-28 bg-gradient-to-r from-transparent via-amber-300/20 to-transparent pointer-events-none z-30 animate-light-sweep" />
 
         <div className="relative z-20 flex items-center justify-between gap-3">
           

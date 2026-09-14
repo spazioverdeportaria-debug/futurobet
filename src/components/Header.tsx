@@ -74,9 +74,11 @@ export default function Header({
             </button>
             <button
               onClick={onOpenRegister || onOpenLogin}
-              className="px-3.5 py-1.5 rounded-full text-xs font-black text-[#0a0702] bg-gradient-to-r from-amber-400 via-yellow-400 to-amber-300 hover:from-yellow-300 hover:via-amber-300 hover:to-yellow-200 shadow-[0_0_18px_rgba(251,191,36,0.5),inset_0_1px_2px_rgba(255,255,255,0.8)] border border-amber-200/90 hover:brightness-105 transition-all duration-200 cursor-pointer flex items-center gap-1 active:scale-95 select-none tracking-tight"
+              className="relative overflow-hidden px-3.5 py-1.5 rounded-full text-xs font-black text-[#0a0702] bg-gradient-to-r from-amber-400 via-yellow-400 to-amber-300 hover:from-yellow-300 hover:via-amber-300 hover:to-yellow-200 shadow-[0_0_18px_rgba(251,191,36,0.5),inset_0_1px_2px_rgba(255,255,255,0.8)] border border-amber-200/90 hover:brightness-105 transition-all duration-200 cursor-pointer flex items-center gap-1 active:scale-95 select-none tracking-tight"
               title="Criar nova conta"
             >
+              {/* Micro Sheen across button */}
+              <div className="absolute inset-y-0 w-8 bg-gradient-to-r from-transparent via-white/40 to-transparent pointer-events-none animate-light-sweep" />
               <UserPlus size={13} className="stroke-[3] text-[#0a0702]" />
               <span className="font-sans font-black">Cadastre-se</span>
             </button>

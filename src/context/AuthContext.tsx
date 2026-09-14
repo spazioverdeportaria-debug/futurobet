@@ -105,10 +105,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const savedSession = localStorage.getItem(STORAGE_SESSION_KEY);
         if (savedSession) {
           const sessionData = JSON.parse(savedSession);
-          if (sessionData && sessionData.cpf) {
-            const cleanCpf = sessionData.cpf.replace(/\D/g, '');
+          if (sessionData && (sessionData.cpf || sessionData.phone || sessionData.id || sessionData.name)) {
+            const cleanCpf = (sessionData.cpf || '').replace(/\D/g, '');
+            const cleanPhone = (sessionData.phone || '').replace(/\D/g, '');
+            const userKey = cleanCpf || sessionData.id || (cleanPhone ? `tel_${cleanPhone}` : '');
+
             const fallbackUser: UserAccount = {
-              cpf: sessionData.cpf,
+              id: userKey || sessionData.id,
+              cpf: sessionData.cpf || '',
               name: sessionData.name || 'Jogador FuturoBet',
               phone: sessionData.phone || '',
               passwordHash: sessionData.passwordHash || '',
@@ -121,22 +125,48 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               referralCode: sessionData.referralCode
             };
 
-            try {
-              const userDocRef = doc(db, 'users', cleanCpf);
-              const snapshot = await getDoc(userDocRef);
-              if (snapshot.exists()) {
-                const userData = snapshot.data() as UserAccount;
-                setAccount(userData);
-              } else {
-                // Save fallback to Firestore so it exists in DB
-                setDoc(userDocRef, fallbackUser, { merge: true }).catch(() => null);
-                setAccount(fallbackUser);
+            // Set account immediately from local storage so UI doesn't flicker or show logged out
+            setAccount(fallbackUser);
+
+            if (userKey) {
+              try {
+                const userDocRef = doc(db, 'users', userKey);
+                const snapshot = await getDoc(userDocRef);
+                if (snapshot.exists()) {
+                  const userData = snapshot.data() as UserAccount;
+                  setAccount(userData);
+                  localStorage.setItem(STORAGE_SESSION_KEY, JSON.stringify(userData));
+                } else {
+                  // Save fallback to Firestore so it exists in DB
+                  setDoc(userDocRef, fallbackUser, { merge: true }).catch(() => null);
+                }
+              } catch (firestoreErr) {
+                console.warn('Firestore offline ou restrito na inicialização, usando sessão local:', firestoreErr);
               }
-            } catch (firestoreErr) {
-              console.warn('Firestore offline ou restrito na inicialização, usando sessão local:', firestoreErr);
-              setAccount(fallbackUser);
             }
           }
+        } else {
+          // Check if there is any stored user account in localStorage to auto-restore
+          try {
+            let latestUser: UserAccount | null = null;
+            for (let i = 0; i < localStorage.length; i++) {
+              const k = localStorage.key(i);
+              if (k && (k.startsWith('futurobet_user_') || k.startsWith('vegasbet_user_'))) {
+                const raw = localStorage.getItem(k);
+                if (raw) {
+                  const u = JSON.parse(raw);
+                  if (u && (u.phone || u.name || u.cpf)) {
+                    latestUser = u;
+                    break;
+                  }
+                }
+              }
+            }
+            if (latestUser) {
+              setAccount(latestUser);
+              localStorage.setItem(STORAGE_SESSION_KEY, JSON.stringify(latestUser));
+            }
+          } catch {}
         }
       } catch (err) {
         console.warn('Sessão restaurada com fallback:', err);

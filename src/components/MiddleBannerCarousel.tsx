@@ -57,8 +57,12 @@ export default function MiddleBannerCarousel({ onOpenDeposit }: MiddleBannerCaro
 
   return (
     <div className="w-full my-3 px-3 select-none">
-      {/* Modern Casino Middle Banner Container */}
-      <div className="relative w-full aspect-[2.4/1] sm:aspect-[2.8/1] min-h-[135px] max-h-[155px] rounded-xl overflow-hidden border border-[#1e2c47] hover:border-amber-400/60 bg-[#080e1a] shadow-md group cursor-pointer" onClick={onOpenDeposit}>
+      {/* Modern Casino Middle Banner Container with Dynamic Sheen */}
+      <div className="relative w-full aspect-[2.4/1] sm:aspect-[2.8/1] min-h-[135px] max-h-[155px] rounded-xl overflow-hidden border border-[#1e2c47] hover:border-amber-400/80 bg-[#080e1a] shadow-md group cursor-pointer" onClick={onOpenDeposit}>
+        
+        {/* Dynamic Sheen Sweep */}
+        <div className="absolute inset-y-0 w-28 bg-gradient-to-r from-transparent via-amber-300/20 to-transparent pointer-events-none z-30 animate-light-sweep" />
+
         {slides.map((slide, idx) => {
           const Icon = slide.icon;
           const isActive = idx === currentIndex;

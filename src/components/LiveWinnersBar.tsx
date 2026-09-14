@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { LIVE_WINNERS } from '../data/gamesConfig';
-import { Trophy } from 'lucide-react';
+import { CheckCircle2, ArrowUpRight } from 'lucide-react';
 
 export default function LiveWinnersBar() {
   const [winnerIndex, setWinnerIndex] = useState(0);
@@ -8,41 +8,47 @@ export default function LiveWinnersBar() {
   useEffect(() => {
     const timer = setInterval(() => {
       setWinnerIndex((prev) => (prev + 1) % LIVE_WINNERS.length);
-    }, 3200);
+    }, 3000);
     return () => clearInterval(timer);
   }, []);
 
   const winner = LIVE_WINNERS[winnerIndex];
 
   return (
-    <div className="w-full px-3 pt-2.5 select-none">
-      <div className="relative bg-gradient-to-r from-[#211202] via-[#0d0701] to-[#211202] border-2 border-[#d4af37]/60 rounded-2xl py-2 px-3.5 flex items-center justify-between text-xs overflow-hidden shadow-[0_6px_20px_rgba(0,0,0,0.9),inset_0_2px_4px_rgba(255,255,255,0.15)]">
+    <div className="w-full px-3 pt-1 select-none">
+      {/* Carrossel discreto e compacto de saques aprovados */}
+      <div className="relative bg-[#0b101c]/90 border border-emerald-500/25 rounded-full py-1 px-3 flex items-center justify-between text-[11px] overflow-hidden shadow-sm">
         
-        {/* Top 3D Specular Highlight Line */}
-        <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-transparent via-[#ffe899]/70 to-transparent pointer-events-none" />
+        {/* Subtle light sweep */}
+        <div className="absolute inset-y-0 w-20 bg-gradient-to-r from-transparent via-emerald-300/10 to-transparent pointer-events-none z-10 animate-light-sweep" />
 
-        <div className="flex items-center gap-2.5 overflow-hidden">
-          {/* 3D Gold Trophy Badge */}
-          <div className="w-7 h-7 bg-gradient-to-b from-[#fff6be] via-[#f7b700] to-[#804f00] p-0.5 rounded-xl shadow-[0_3px_8px_rgba(245,158,11,0.6)] flex items-center justify-center shrink-0 animate-pulse">
-            <div className="w-full h-full bg-[#170e01] rounded-[10px] flex items-center justify-center">
-              <Trophy className="w-4 h-4 fill-amber-300 text-amber-300" />
-            </div>
+        {/* Informação do Saque */}
+        <div className="flex items-center gap-2 overflow-hidden flex-1">
+          {/* Status PIX / Saque Aprovado */}
+          <div className="flex items-center gap-1 shrink-0 text-emerald-400 font-bold text-[10px]">
+            <CheckCircle2 className="w-3 h-3 text-emerald-400 shrink-0" />
+            <span className="hidden xs:inline">Saque PIX</span>
           </div>
 
-          <div key={winner.id} className="flex items-center gap-1.5 animate-in fade-in slide-in-from-bottom-1 duration-300 truncate">
-            <span className="font-extrabold text-amber-100 truncate">{winner.user}</span>
-            <span className="text-[10px] font-bold text-amber-400/90">ganhou</span>
-            <span className="font-black text-emerald-300 bg-emerald-950/90 border-2 border-emerald-500/60 px-2 py-0.5 rounded-lg text-xs shadow-sm font-mono">
+          <div className="h-3 w-px bg-white/10 shrink-0" />
+
+          {/* Nome e Valor do Saque */}
+          <div
+            key={winner.id}
+            className="flex items-center gap-1.5 animate-in fade-in slide-in-from-bottom-1 duration-250 truncate text-[11px]"
+          >
+            <span className="font-semibold text-zinc-200 truncate">{winner.user}</span>
+            <span className="text-zinc-400 text-[10px]">sacou</span>
+            <span className="font-extrabold font-mono text-emerald-400 tracking-tight">
               {winner.amount}
             </span>
-            <span className="text-amber-200/80 hidden sm:inline text-[10px] font-bold">no {winner.game}</span>
           </div>
         </div>
 
-        {/* Live Badge */}
-        <div className="flex items-center gap-1 flex-shrink-0 text-[9px] font-black text-emerald-300 uppercase tracking-widest bg-emerald-950/80 border border-emerald-500/50 px-2.5 py-1 rounded-full shadow-inner">
-          <span className="w-2 h-2 bg-emerald-400 rounded-full animate-ping" />
-          <span>AO VIVO</span>
+        {/* Tag Discreta de Tempo */}
+        <div className="flex items-center gap-1 shrink-0 text-[9px] font-medium text-zinc-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full">
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+          <span>{winner.time}</span>
         </div>
 
       </div>

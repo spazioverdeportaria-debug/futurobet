@@ -542,6 +542,9 @@ function FuturoBetContent() {
                 onOpenDeposit={handleOpenDeposit}
               />
 
+              {/* Ticker Dinâmico de Ganhadores Recentes com Efeito de Brilho */}
+              <LiveWinnersBar />
+
               {/* 🎡 DAILY ROLETA PROMINENT BANNER */}
               <RoletaBanner onOpenWheel={handleOpenWheel} />
 
@@ -795,13 +798,13 @@ function FuturoBetContent() {
           </div>
         )}
 
-        {/* POP-UPS PROMOCIONAIS DE ENTRADA NO CASSINO (Roleta VIP & Bet de Esportes) */}
-        <WelcomePromoPopups
+        {/* POP-UPS PROMOCIONAIS DE ENTRADA NO CASSINO DESATIVADOS CONFORME SOLICITAÇÃO DO CLIENTE */}
+        {/* <WelcomePromoPopups
           onOpenWheel={handleOpenWheel}
           onOpenGame={handleSelectGame}
           onOpenSports={() => handleTabChange('futebol')}
           isAnyModalOpen={Boolean(selectedGame || isAuthModalOpen || isCashierOpen || isDepositOpen || isWheelOpen || isProfileOpen || isExitCasinoModalOpen)}
-        />
+        /> */}
 
         {/* POP-UP COMPACTO FLUTUANTE: 100% BÔNUS PARA CADASTRO */}
         <FloatingBonusPrompt
